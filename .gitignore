@@ -1,0 +1,28 @@
+# Credentials and local runtime data
+.env
+*.log
+*.har
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+venv_clean/
+
+# PyInstaller/build output
+build/
+build_*/
+dist/
+dist_*/
+release_*/
+*.spec.local
+
+# IDE/OS files
+.idea/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+.DS_Store

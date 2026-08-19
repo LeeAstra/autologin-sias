@@ -2,8 +2,8 @@
 
 
 a = Analysis(
-    ['auto_login_v4.4.py'],
-    pathex=[],
+    ['../src/auto_login_headless.py'],
+    pathex=['../src'],
     binaries=[],
     datas=[],
     hiddenimports=[],
@@ -12,7 +12,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
-    optimize=0,
+    optimize=1,
 )
 pyz = PYZ(a.pure)
 
@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='auto_login_v4.4',
+    name='AutoLogin_SIAS_Setup',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -17,6 +17,7 @@ build_*/
 dist/
 dist_*/
 release_*/
+legacy_local/
 *.spec.local
 
 # IDE/OS files

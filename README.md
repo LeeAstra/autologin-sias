@@ -7,7 +7,7 @@
 
 ## 当前版本
 
-- 推荐源码：[auto_login_headless.py](auto_login_headless.py)
+- 推荐源码：[src/auto_login_headless.py](src/auto_login_headless.py)
 - 当前版本：`1.1.0`
 - Windows 后台版：`AutoLogin_SIAS_Headless.exe`
 - 首次配置向导：`AutoLogin_SIAS_Setup.exe`
@@ -87,8 +87,9 @@ Background login request completed successfully
 当前后台核心只使用 Python 标准库；Windows 打包需要 PyInstaller：
 
 ```powershell
-python auto_login_headless.py --version
-python auto_login_headless.py --check
+python src/auto_login_headless.py --version
+python src/auto_login_headless.py --check
+Set-Location packaging
 pyinstaller --noconfirm auto_login_headless.spec
 pyinstaller --noconfirm auto_login_headless_setup.spec
 ```
@@ -104,7 +105,7 @@ pyinstaller --noconfirm auto_login_headless_setup.spec
 
 ## 历史版本
 
-`auto_login_v1.py` 到 `auto_login_v4.4.py` 保留用于开发参考。它们依赖浏览器、前台窗口或 `pyautogui`，锁屏后不可靠；新部署应使用 Headless 1.1。
+旧版 v1–v4.4、V30 和图像模板仅保留在开发者本地归档目录，不属于当前发布源码；它们依赖浏览器、前台窗口或 `pyautogui`，锁屏后不可靠。新部署应使用 Headless 1.1。
 
 ## 许可证
 

@@ -1,0 +1,31 @@
+name: Windows validation
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-build.txt
+      - run: python -m unittest discover -s tests -v
+      - shell: powershell
+        run: .\tests\Test-TaskPreview.ps1
+      - shell: powershell
+        run: .\scripts\Build-Installer.ps1
+      - run: python tests/check_bundle.py
+      - run: python tests/check_frozen_login.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autologin-windows-${{ github.sha }}
+          path: |
+            packaging/dist/AutoLogin_SIAS_Installer.exe
+            packaging/dist/AutoLogin_SIAS_Headless.exe
+            packaging/dist/SHA256SUMS.txt

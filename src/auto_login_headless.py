@@ -16,16 +16,16 @@ import os
 from pathlib import Path
 import socket
 import sys
-import tempfile
 import time
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener
+from app_version import VERSION
+from credentials import load_env_file, write_env_file
 
 
 APP_NAME = "AutoLogin_SIAS_Headless"
-VERSION = "1.1.0"
 PORTAL_ORIGIN = "http://2.2.2.3"
 PORTAL_PAGE = (
     PORTAL_ORIGIN
@@ -103,41 +103,8 @@ def configure_logging() -> logging.Logger:
     return logger
 
 
-LOGGER = configure_logging()
-
-
-def load_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.is_file():
-        return values
-
-    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        values[key] = value
-    return values
-
-
-def write_env_file(path: Path, username: str, password: str) -> None:
-    if any(char in username or char in password for char in "\r\n"):
-        raise ValueError("账号或密码不能包含换行符")
-    path.write_text(
-        "# AutoLogin_SIAS local credentials\n"
-        f"WLAN_USER={username}\n"
-        f"WLAN_PWD={password}\n",
-        encoding="utf-8",
-    )
-    try:
-        # Restrict the file on Unix-like systems. Windows inherits the folder ACL.
-        path.chmod(0o600)
-    except OSError:
-        pass
+LOGGER = logging.getLogger(APP_NAME)
+LOGGER.addHandler(logging.NullHandler())
 
 
 def setup_env() -> int:
@@ -184,7 +151,6 @@ def parse_args() -> argparse.Namespace:
 
 def rc4_hex(plain_text: str, key_text: str) -> str:
     """Match the portal's do_encrypt_rc4() JavaScript implementation."""
-    plain_text = plain_text.strip()
     key_text = str(key_text)
     if not key_text:
         raise ValueError("RC4 key is empty")
@@ -262,6 +228,8 @@ def response_indicates_success(body: bytes) -> tuple[bool | None, str]:
 
         for key in ("result", "status", "code"):
             value = payload.get(key)
+            if isinstance(value, bool):
+                return value, f"JSON {key} field"
             normalized = str(value).lower()
             if normalized in ("success", "ok", "1", "200", "0"):
                 return True, f"JSON {key} field"
@@ -328,6 +296,9 @@ def run_login() -> int:
         if success is False:
             LOGGER.error("Portal explicitly rejected the login")
             return 5
+        if success is None:
+            LOGGER.error("Cannot confirm authentication from the portal response")
+            return 8
 
         LOGGER.info("Background login request completed successfully")
         return 0
@@ -347,6 +318,7 @@ if __name__ == "__main__":
     if arguments.version:
         print(f"{APP_NAME} {VERSION}")
         sys.exit(0)
+    LOGGER = configure_logging()
     setup_executable = (
         getattr(sys, "frozen", False)
         and Path(sys.executable).stem.lower() == "autologin_sias_setup"

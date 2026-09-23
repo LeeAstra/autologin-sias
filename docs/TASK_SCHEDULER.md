@@ -4,6 +4,8 @@
 
 ## 一条命令安装或更新
 
+单文件安装包 `AutoLogin_SIAS_Installer.exe` 已整合下述脚本，完成账号输入和登录验证后会自动调用，无需再手动执行命令。它将后台程序安装到 `%LOCALAPPDATA%\AutoLogin_SIAS`；新任务与已有任务的处理规则和下文一致。源码构建方法见 README，既有 Release 不会自动包含新安装包。
+
 先运行配置向导，配置自己的 `.env`，并确认手动运行后台 EXE 能认证成功。把 EXE 和配置放在固定、已下载到本机的目录中。下载仓库中的 [Install-AutoLoginTask.ps1](../scripts/Install-AutoLoginTask.ps1)，或使用仓库内的副本。
 
 使用**同一个 Windows 账户**以管理员身份打开 PowerShell，在仓库根目录执行：

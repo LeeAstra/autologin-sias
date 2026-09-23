@@ -1,0 +1,3 @@
+# Runtime code uses only the standard library. Pin packaging tools for releases.
+pyinstaller==6.17.0
+pyinstaller-hooks-contrib==2025.11

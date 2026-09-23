@@ -16,16 +16,15 @@ import os
 from pathlib import Path
 import socket
 import sys
-import tempfile
 import time
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener
+from app_version import VERSION
 
 
 APP_NAME = "AutoLogin_SIAS_Headless"
-VERSION = "1.1.0"
 PORTAL_ORIGIN = "http://2.2.2.3"
 PORTAL_PAGE = (
     PORTAL_ORIGIN
@@ -103,7 +102,8 @@ def configure_logging() -> logging.Logger:
     return logger
 
 
-LOGGER = configure_logging()
+LOGGER = logging.getLogger(APP_NAME)
+LOGGER.addHandler(logging.NullHandler())
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -262,6 +262,8 @@ def response_indicates_success(body: bytes) -> tuple[bool | None, str]:
 
         for key in ("result", "status", "code"):
             value = payload.get(key)
+            if isinstance(value, bool):
+                return value, f"JSON {key} field"
             normalized = str(value).lower()
             if normalized in ("success", "ok", "1", "200", "0"):
                 return True, f"JSON {key} field"
@@ -328,6 +330,9 @@ def run_login() -> int:
         if success is False:
             LOGGER.error("Portal explicitly rejected the login")
             return 5
+        if success is None:
+            LOGGER.error("Cannot confirm authentication from the portal response")
+            return 8
 
         LOGGER.info("Background login request completed successfully")
         return 0
@@ -347,6 +352,7 @@ if __name__ == "__main__":
     if arguments.version:
         print(f"{APP_NAME} {VERSION}")
         sys.exit(0)
+    LOGGER = configure_logging()
     setup_executable = (
         getattr(sys, "frozen", False)
         and Path(sys.executable).stem.lower() == "autologin_sias_setup"

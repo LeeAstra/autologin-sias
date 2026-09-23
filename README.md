@@ -1,6 +1,6 @@
 # AutoLogin SIAS
 
-校园网 SIAS 认证自动登录工具。当前推荐版本是 **Headless 1.1**：通过 HTTP 请求完成认证，不启动浏览器、不操作桌面，适合 Windows 定时任务和锁屏状态运行。
+校园网 SIAS 认证自动登录工具。当前稳定发布为 **Headless 1.1**，本分支为 **1.2.0-rc.1 一键部署候选版**：通过 HTTP 请求完成认证，不启动浏览器、不操作桌面，适合 Windows 定时任务和锁屏状态运行。
 
 > [!IMPORTANT]
 > 本项目只适用于你有权使用的校园网账号和认证系统。请遵守学校网络管理规定。不要提交 `.env`、账号、密码、Cookie、HAR 或真实 MAC 地址。
@@ -8,7 +8,7 @@
 ## 当前版本
 
 - 推荐源码：[src/auto_login_headless.py](src/auto_login_headless.py)
-- 当前版本：`1.1.0`
+- 源码版本：`1.2.0-rc.1`；稳定发布：`1.1.0`
 - Windows 后台版：`AutoLogin_SIAS_Headless.exe`
 - 首次配置向导：`AutoLogin_SIAS_Setup.exe`
 - 旧版 GUI 自动化脚本：仅作为历史归档，不建议继续使用
@@ -16,6 +16,22 @@
 Headless 版本使用标准库实现 HTTP 请求和 RC4 兼容逻辑，不依赖 `requests`、浏览器或 `pyautogui`。
 
 ## 快速开始（Windows）
+
+### 候选版：单文件一键部署
+
+运行 `AutoLogin_SIAS_Installer.exe`，允许 Windows 管理员授权，输入校园网账号密码，即可完成后台程序安装、登录验证和自动任务注册。安装前请连接 `UESTC`，使用自己的 Windows 管理员账户，不要用其他账户的凭据提权。
+
+文件安装到 `%LOCALAPPDATA%\AutoLogin_SIAS`，无需手动移动 EXE、运行独立配置向导或粘贴 PowerShell 命令。密码保存在该目录的 `.env`。登录验证失败会恢复原程序和配置；任务安装失败会保留已验证的文件并显示错误，修复原因后可重新运行安装包。
+
+新任务监听 `UESTC` 的 `8001 / 11005` 事件并每天 04:10 执行；更新任务仍保留原时间计划和电源设置。不要删除安装目录；下载的安装包可在成功后删除。安装不会自动启用已关闭的 WLAN 事件日志，遇到该错误请按任务指南启用后重试。
+
+构建单文件安装包（需要 Python 和 PyInstaller）：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
+```
+
+产物为 `packaging/dist/AutoLogin_SIAS_Installer.exe`，只需分发这一个文件。下面的双 EXE 方式继续作为手动部署选项。
 
 ### 第一步：下载并准备目录
 
@@ -122,6 +138,7 @@ Background login request completed successfully
 | 4 | 认证服务器返回异常 HTTP 状态 |
 | 5 | 服务器明确拒绝登录 |
 | 6/7 | HTTP 或网络错误 |
+| 8 | 无法从响应确认认证成功，按失败处理并允许任务重试 |
 | 9 | 未预期错误 |
 
 ## 从源码运行和打包

@@ -81,7 +81,9 @@ if (-not $existing) {
 $instances = $xml.Task.Settings.SelectSingleNode('*[local-name()="MultipleInstancesPolicy"]')
 if ($instances) { $instances.InnerText = 'IgnoreNew' } else { Add-TextElement $xml.Task.Settings 'MultipleInstancesPolicy' 'IgnoreNew' }
 $xml.Task.Actions.Exec.Command = $exe.FullName
-$xml.Task.Actions.Exec.WorkingDirectory = $exe.DirectoryName
+$workingDirectory = $xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="WorkingDirectory"]')
+if ($workingDirectory) { $workingDirectory.InnerText = $exe.DirectoryName }
+else { Add-TextElement $xml.Task.Actions.Exec 'WorkingDirectory' $exe.DirectoryName }
 # An old action's arguments may invoke setup or other unintended modes.
 if ($xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="Arguments"]')) { throw 'Existing action has arguments; review them manually.' }
 if ($ExportOnly) {

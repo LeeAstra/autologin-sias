@@ -1,6 +1,6 @@
 # Development and release workflow
 
-Develop on `codex/<feature>` branches, open a PR and require passing Windows CI before merging. The shared source version is in `src/app_version.py`: currently **1.2.0-rc.1**. Stable release **v1.1.0** remains unchanged until real-world acceptance passes. Update the changelog with each version; never move existing release tags.
+Develop on `codex/<feature>` branches, open a PR and require passing Windows CI before merging. The shared source version is in `src/app_version.py`: currently **1.2.0-rc.2**. Stable release **v1.1.0** remains unchanged until real-world acceptance passes. Update the changelog with each version; never move existing release tags.
 
 Use Windows x64 and Python 3.13, preferably official CPython in a clean virtual environment:
 

@@ -1,4 +1,16 @@
-# 1.2.0-rc.1 validation and package size
+# Candidate validation and package size
+
+## 1.2.0-rc.2 review follow-up
+
+The password-whitespace review finding was confirmed and fixed. Installer and setup now share a versioned, lossless credential writer/reader; RC4 no longer strips the password. Legacy `.env` files retain their original parsing rules. New-format configuration requires rc.2 or later; restore the old configuration when rolling back to an older binary.
+
+18 Python tests and task XML preview checks pass. Frozen regression checks additionally verify that whitespace, quotes and backslashes reach the encryption step unchanged. A transient Windows file-lock failure during reinstallation was reproduced and fixed with staged replacement, bounded retries and rollback limited to changed files; regression checks then passed.
+
+The rebuilt installer is 16,319,693 bytes. Its embedded payload and frozen CLI checks pass. The rc.2 background EXE was deployed after a local backup and executed through the existing scheduled task on 2026-09-23 at 17:20: authentication succeeded and the task returned 0. Task XML and the credential-file hash were unchanged; the next run remained 04:10. This does not verify fresh task registration or the interactive UAC flow.
+
+The review's spec-name finding does not match the checked-in files: `auto_login_headless.spec` emits `AutoLogin_SIAS_Headless`, while `auto_login_headless_setup.spec` emits `AutoLogin_SIAS_Setup`. Both clean Windows CI runs for rc.1's final commit `bd209d3` passed; the scripts were not swapped.
+
+## Historical 1.2.0-rc.1 results
 
 Local validation date: 2026-09-23. Windows x64, Conda Python 3.13.5, PyInstaller 6.17.0, hooks 2025.11.
 

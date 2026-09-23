@@ -5,11 +5,33 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
 from app_version import VERSION
+from credentials import write_env_file
 
 
 def payload_dir():
     return Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent)) / 'payload'
+
+
+def replace_file(path, writer):
+    """Stage beside the target; retry transient Windows locks without truncation."""
+    descriptor, name = tempfile.mkstemp(prefix='.autologin-', dir=path.parent)
+    os.close(descriptor)
+    staged = Path(name)
+    try:
+        writer(staged)
+        for attempt in range(20):
+            try:
+                os.replace(staged, path)
+                return
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.2)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def install(payload, target, username, password, runner=subprocess.run):
@@ -21,23 +43,28 @@ def install(payload, target, username, password, runner=subprocess.run):
     config = target / '.env'
     files = [exe, script, config]
     previous = {p: p.read_bytes() if p.exists() else None for p in files}
+    changed = []
     # Keep credentials out of process arguments and environment variables.
     child_env = dict(os.environ)
     child_env.pop('WLAN_USER', None)
     child_env.pop('WLAN_PWD', None)
     try:
-        shutil.copy2(payload / exe.name, exe)
-        shutil.copy2(payload / script.name, script)
-        config.write_text(f'WLAN_USER={username}\nWLAN_PWD={password}\n', encoding='utf-8')
+        for path in (exe, script):
+            if previous[path] != (payload / path.name).read_bytes():
+                replace_file(path, lambda staged: shutil.copy2(payload / path.name, staged))
+                changed.append(path)
+        replace_file(config, lambda staged: write_env_file(staged, username, password))
+        changed.append(config)
         result = runner([str(exe), '--check'], cwd=str(target), env=child_env, timeout=90)
         if result.returncode:
             raise RuntimeError(f'登录验证失败（退出码 {result.returncode}），请检查校园网连接、账号及日志。')
     except BaseException:
-        for path, content in previous.items():
+        for path in reversed(changed):
+            content = previous[path]
             if content is None:
                 path.unlink(missing_ok=True)
             else:
-                path.write_bytes(content)
+                replace_file(path, lambda staged: staged.write_bytes(content))
         raise
     # Once registration begins, retain installed files even on failure: a task
     # may already reference them. The task script backs up the previous XML.

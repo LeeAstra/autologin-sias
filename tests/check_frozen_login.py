@@ -11,10 +11,13 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
+from urllib.parse import parse_qs
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'src'))
 import install_autologin
+from credentials import write_env_file
+from auto_login_headless import rc4_hex
 
 requests = []
 response = {'body': b'{"success":true}', 'status': 200}
@@ -71,6 +74,16 @@ try:
             assert b'userName=synthetic-user' in posts[0][2], label
             assert b'pwd=synthetic-password' not in posts[0][2], label
             print(f'Frozen EXE: {label} -> {result.returncode} OK')
+
+        response.update(body=b'{"success":true}', status=200)
+        for password in [' spaced-password ', '"quoted-password"', r'back\slash']:
+            write_env_file(work / '.env', 'synthetic-user', password)
+            requests.clear()
+            result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
+            assert result.returncode == 0
+            form = parse_qs(next(r[2] for r in requests if r[0] == 'POST').decode())
+            assert form['pwd'][0] == rc4_hex(password, form['auth_tag'][0])
+        print('Frozen EXE: whitespace, quotes and backslashes preserved through encryption OK')
 
         # Exercise file deployment and the real child EXE. Only task registration
         # is replaced; its XML is covered separately by Test-TaskPreview.ps1.

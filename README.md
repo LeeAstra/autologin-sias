@@ -1,6 +1,6 @@
 # AutoLogin SIAS
 
-校园网 SIAS 认证自动登录工具。当前稳定发布为 **Headless 1.1**，本分支为 **1.2.0-rc.1 一键部署候选版**：通过 HTTP 请求完成认证，不启动浏览器、不操作桌面，适合 Windows 定时任务和锁屏状态运行。
+校园网 SIAS 认证自动登录工具。当前稳定发布为 **Headless 1.1**，本分支为 **1.2.0-rc.2 一键部署候选版**：通过 HTTP 请求完成认证，不启动浏览器、不操作桌面，适合 Windows 定时任务和锁屏状态运行。
 
 > [!IMPORTANT]
 > 本项目只适用于你有权使用的校园网账号和认证系统。请遵守学校网络管理规定。不要提交 `.env`、账号、密码、Cookie、HAR 或真实 MAC 地址。
@@ -8,7 +8,7 @@
 ## 当前版本
 
 - 推荐源码：[src/auto_login_headless.py](src/auto_login_headless.py)
-- 源码版本：`1.2.0-rc.1`；稳定发布：`1.1.0`
+- 源码版本：`1.2.0-rc.2`；稳定发布：`1.1.0`
 - Windows 后台版：`AutoLogin_SIAS_Headless.exe`
 - 首次配置向导：`AutoLogin_SIAS_Setup.exe`
 - 旧版 GUI 自动化脚本：仅作为历史归档，不建议继续使用
@@ -35,7 +35,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installe
 
 ### 第一步：下载并准备目录
 
-从 [Releases](https://github.com/cloudLee-icy/autologin-sias/releases) 下载：
+从 [Releases](https://github.com/LeeAstra/autologin-sias/releases) 下载：
 
 - `AutoLogin_SIAS_Setup.exe`：首次配置向导；
 - `AutoLogin_SIAS_Headless.exe`：真正加入定时任务的后台程序。
@@ -118,6 +118,8 @@ WLAN_PWD=your_password
 ```
 
 程序会优先寻找 EXE 同目录的 `.env`，其次寻找上级目录和当前工作目录。`.env` 永远不要提交到 GitHub。
+
+从 `1.2.0-rc.2` 开始，向导生成的 `.env` 带有 `env-format=json-v1` 标记，值使用 JSON 字符串编码，以保留密码中的空白、引号和反斜杠。以上手写旧格式仍兼容。不要删除新格式标记；回退到旧程序时应同时恢复旧配置。
 
 ## 日志和退出码
 

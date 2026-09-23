@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from credentials import load_env_file
 
 spec = importlib.util.spec_from_file_location('installer', Path(__file__).resolve().parents[1] / 'src/install_autologin.py')
 installer = importlib.util.module_from_spec(spec)
@@ -34,7 +35,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertNotIn('WLAN_PWD', calls[0][1]['env'])
         self.assertNotIn('secret', str(calls))
-        self.assertEqual((self.target / '.env').read_text(), 'WLAN_USER=user\nWLAN_PWD=secret\n')
+        self.assertEqual(load_env_file(self.target / '.env'), {'WLAN_USER': 'user', 'WLAN_PWD': 'secret'})
 
     def test_login_failure_restores_old_installation(self):
         for name in ('AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env'):
@@ -64,6 +65,30 @@ class InstallTests(unittest.TestCase):
             installer.install(self.payload, self.target, 'user', 'secret', interrupted)
         self.assertEqual((self.target / '.env').read_bytes(), b'old')
         self.assertFalse((self.target / 'AutoLogin_SIAS_Headless.exe').exists())
+
+    def test_locked_target_is_not_truncated(self):
+        target = self.target / 'existing.exe'
+        target.write_bytes(b'original')
+        with patch.object(installer.os, 'replace', side_effect=PermissionError('locked')), \
+             patch.object(installer.time, 'sleep'), self.assertRaises(PermissionError):
+            installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
+        self.assertEqual(target.read_bytes(), b'original')
+        self.assertEqual(list(self.target.iterdir()), [target])
+
+    def test_transient_lock_retries(self):
+        target = self.target / 'existing.exe'
+        target.write_bytes(b'original')
+        replace = os.replace
+        attempts = []
+        def temporarily_locked(source, destination):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise PermissionError('locked')
+            return replace(source, destination)
+        with patch.object(installer.os, 'replace', side_effect=temporarily_locked), patch.object(installer.time, 'sleep'):
+            installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
+        self.assertEqual(target.read_bytes(), b'new')
+        self.assertEqual(len(attempts), 2)
 
 
 if __name__ == '__main__':

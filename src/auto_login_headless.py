@@ -22,6 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 from app_version import VERSION
+from credentials import load_env_file, write_env_file
 
 
 APP_NAME = "AutoLogin_SIAS_Headless"
@@ -106,40 +107,6 @@ LOGGER = logging.getLogger(APP_NAME)
 LOGGER.addHandler(logging.NullHandler())
 
 
-def load_env_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.is_file():
-        return values
-
-    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        values[key] = value
-    return values
-
-
-def write_env_file(path: Path, username: str, password: str) -> None:
-    if any(char in username or char in password for char in "\r\n"):
-        raise ValueError("账号或密码不能包含换行符")
-    path.write_text(
-        "# AutoLogin_SIAS local credentials\n"
-        f"WLAN_USER={username}\n"
-        f"WLAN_PWD={password}\n",
-        encoding="utf-8",
-    )
-    try:
-        # Restrict the file on Unix-like systems. Windows inherits the folder ACL.
-        path.chmod(0o600)
-    except OSError:
-        pass
-
-
 def setup_env() -> int:
     """Interactive first-run configuration; never used by scheduled mode."""
     target = BASE_DIR / ".env"
@@ -184,7 +151,6 @@ def parse_args() -> argparse.Namespace:
 
 def rc4_hex(plain_text: str, key_text: str) -> str:
     """Match the portal's do_encrypt_rc4() JavaScript implementation."""
-    plain_text = plain_text.strip()
     key_text = str(key_text)
     if not key_text:
         raise ValueError("RC4 key is empty")

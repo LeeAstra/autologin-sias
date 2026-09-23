@@ -10,6 +10,9 @@ Local validation date: 2026-09-23. Windows x64, Conda Python 3.13.5, PyInstaller
 - Both EXEs build. The installer archive contains byte-identical copies of the current background EXE and PowerShell script.
 - Frozen installer `--version` / `--verify-payload` and background EXE `--version` exit successfully. These checks suppress UAC only for read-only diagnostics and do not run the deployment wizard.
 - The build produces SHA-256 checksums alongside the EXEs.
+- Frozen EXE loopback-proxy regression tests pass for successful authentication, explicit rejection, boolean rejection, unknown HTML, empty responses and HTTP 503. The deployment function also runs the real child EXE and verifies successful deployment plus rollback after failed authentication; only task registration is substituted in this test.
+- On 2026-09-23, the candidate background EXE was manually run with `--check` on an existing UESTC connection using the existing local configuration. Portal and jump requests returned HTTP 200, the response was recognized as successful, and the process exited 0. A subsequent external HTTPS HEAD request returned 200. This verifies a real request on an already-connected machine, not recovery from disconnection.
+- Read-only inspection found the existing task ready, its last result 0 and its next run scheduled for 04:10. This task was not modified or triggered by the regression tests and does not establish candidate task execution.
 
 ## Size comparison
 
@@ -26,6 +29,6 @@ PyInstaller supports configuring analysis through [spec files](https://pyinstall
 
 ## Not yet verified
 
-Real UESTC authentication, UAC interaction, actual task registration under the intended account, reconnect/lock-screen/daily execution and clean-machine installation remain manual acceptance items. No real credentials were used for these automated tests. Keep this version a candidate until those checks pass.
+UAC interaction, the full frozen installer wizard, actual task registration under the intended account, reconnect/lock-screen/daily execution and clean-machine installation remain manual acceptance items. Automated regression tests use only synthetic credentials; the separate real-network check reused local credentials without printing or modifying them. Keep this version a candidate until those checks pass.
 
 An unknown portal response now exits with code 8 instead of reporting success. If the actual portal uses a currently unsupported success response, capture a sanitized response structure and extend the parser with a regression test before release.

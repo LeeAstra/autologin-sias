@@ -13,6 +13,7 @@ Local validation date: 2026-09-23. Windows x64, Conda Python 3.13.5, PyInstaller
 - Frozen EXE loopback-proxy regression tests pass for successful authentication, explicit rejection, boolean rejection, unknown HTML, empty responses and HTTP 503. The deployment function also runs the real child EXE and verifies successful deployment plus rollback after failed authentication; only task registration is substituted in this test.
 - On 2026-09-23, the candidate background EXE was manually run with `--check` on an existing UESTC connection using the existing local configuration. Portal and jump requests returned HTTP 200, the response was recognized as successful, and the process exited 0. A subsequent external HTTPS HEAD request returned 200. This verifies a real request on an already-connected machine, not recovery from disconnection.
 - Read-only inspection found the existing task ready, its last result 0 and its next run scheduled for 04:10. This task was not modified or triggered by the regression tests and does not establish candidate task execution.
+- After explicit upgrade authorization, the existing task executable was backed up and replaced with the verified candidate on 2026-09-23. Running the actual scheduled task at 16:25 completed with result 0 and successful portal/jump logs. The task XML was byte-for-byte unchanged; its next daily run remained 04:10. The old EXE and task XML were retained locally for recovery; credentials were unchanged.
 
 ## Size comparison
 

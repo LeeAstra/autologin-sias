@@ -1,74 +1,104 @@
 # AutoLogin SIAS
 
-**当前版本：v1.2.0 · Windows x64 一键部署**
+连接校园网后自动完成 SIAS 认证，也可每天定时重新认证。运行时无需打开浏览器。
 
-校园网 SIAS 后台认证工具。通过 HTTP 请求完成认证，无需启动浏览器或操作桌面。
+**当前版本：v1.2.0 · Windows x64 · 无需安装 Python**
 
-## 下载与安装
+**[下载一键安装包](https://github.com/LeeAstra/autologin-sias/releases/download/v1.2.0/AutoLogin_SIAS_Installer.exe)** · [版本说明](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0) · [使用与排障](docs/USAGE.md)
 
-**[下载 v1.2.0 安装包](https://github.com/LeeAstra/autologin-sias/releases/download/v1.2.0/AutoLogin_SIAS_Installer.exe)** · [版本说明与校验文件](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0)
+## 第一次使用，按这 4 步操作
 
-1. 连接 `UESTC` 校园网 Wi-Fi。
-2. 双击 `AutoLogin_SIAS_Installer.exe`，允许 Windows 管理员授权。使用自己的 Windows 管理员账户，不要换用其他账户提权。
-3. 输入校园网账号和密码。程序会安装后台 EXE、验证登录，并创建或更新自动任务。
-4. 出现“部署完成”后即可关闭窗口。
+### 1. 连接校园网，准备账号
 
-**普通用户只需要下载安装器这一个文件**，不需要另行下载旧版 `AutoLogin_SIAS_Setup.exe`、手动移动后台 EXE 或粘贴 PowerShell 命令。
+- 电脑连接本项目适配的 SIAS 校园网，默认 Wi-Fi 名称为 **`UESTC`**。
+- 准备好自己的**校园网账号和密码**，不是 Wi-Fi 密码或 Windows 密码。
+- 使用你自己的 Windows 管理员账户完成安装。
 
-默认安装目录：`%LOCALAPPDATA%\AutoLogin_SIAS`。成功后可以删除下载的安装包，但应保留安装目录。
+安装时会发起一次真实认证，需要能访问校园网认证服务器。其他学校或认证系统是否适用，需要单独验证。
 
-| Release 附件 | 用途 |
+### 2. 下载并打开安装包
+
+点击上方“下载一键安装包”，得到：
+
+```text
+AutoLogin_SIAS_Installer.exe
+```
+
+双击运行。Windows 询问是否允许更改设备时，确认是刚下载的本项目安装包后允许。随后会打开一个**文字输入窗口**。
+
+如果系统要求输入另一个管理员账户的密码，先停止安装，见 [使用指南](docs/USAGE.md)。任务和安装位置与运行安装器的账户有关。
+
+<details>
+<summary>从 Releases 页面下载时，应该选哪个文件？</summary>
+
+展开 `Assets`，选择 **`AutoLogin_SIAS_Installer.exe`** 即可。`Source code (zip/tar.gz)` 是源码，不能双击安装。
+
+| 文件 | 用途 |
 |---|---|
-| `AutoLogin_SIAS_Installer.exe` | 完整安装入口，内置后台 EXE 和任务脚本 |
-| `AutoLogin_SIAS_Headless.exe` | 已有部署或高级用户单独更新后台程序 |
-| `SHA256SUMS.txt` | 下载文件的 SHA-256 校验清单 |
+| `AutoLogin_SIAS_Installer.exe` | 普通用户使用的完整安装包 |
+| `AutoLogin_SIAS_Headless.exe` | 已有部署单独更新后台程序时使用 |
+| `SHA256SUMS.txt` | 校验下载文件是否完整 |
 
-## 安装后如何运行
+旧版 `AutoLogin_SIAS_Setup.exe` 的用法见历史文档，不用于本次安装。
 
-- 连接指定 Wi-Fi：监听 `8001 / 11005` 事件中的 `SSID = UESTC`，延迟 30 秒认证。
-- 新建任务：每天 **04:10** 再认证一次；失败后每 5 分钟重试，最多 3 次。
-- 更新已有任务：备份 XML，保留原时间计划、账户、重试和电源设置；不会自动补建每日任务。
-- 默认不主动唤醒电脑；睡眠期间错过的定时允许恢复后补跑，不保证立即执行。
+</details>
 
-详细参数、手动管理、睡眠行为和恢复方法见 [自动任务指南](docs/TASK_SCHEDULER.md)。
+### 3. 输入校园网账号和密码
 
-## 已有用户升级
+按窗口提示依次输入，每项输入后按回车：
 
-可以重新运行最新版安装器，重新输入账号密码。安装器使用上述固定目录，验证成功后更新同名 `AutoLogin_SIAS` 任务的程序路径；自定义名称的旧任务需要按任务指南单独处理。只有新任务采用默认时间计划。
+```text
+校园网账号：
+校园网密码（不显示）：
+```
 
-若希望保留现有安装位置，可先备份原后台 EXE 和任务 XML，再用本版本的独立后台 EXE 替换原文件，并手动运行任务检查结果。不要在任务运行过程中替换文件。
+**输入密码时不会显示文字，也不会显示星号，这是正常现象。** 输入完成后按回车，等待程序验证账号、安装后台程序并配置自动任务。
 
-旧格式 `.env` 继续兼容。新版向导生成的配置带有 `env-format=json-v1` 标记，可保留密码中的空白、引号和反斜杠；不要删除标记。回退旧程序时应同时恢复旧配置。升级不需要混用旧版 Setup。
+### 4. 看到“部署完成”，再关闭窗口
 
-## 验证与排障
+成功时会显示：
 
-日志位于后台 EXE 同目录的 `auto_login_headless.log`。成功时包含 `Background login request completed successfully`，任务最后运行结果应为 `0`。
+```text
+部署完成！后台认证和自动任务已就绪。可删除下载的安装包。
+```
 
-| 退出码 | 含义 |
-|---:|---|
-| 0 | 认证请求通过成功判断 |
-| 2 | 缺少账号或密码 |
-| 4 | 认证服务器返回异常状态 |
-| 5 | 服务器明确拒绝认证 |
-| 6 / 7 | HTTP 或网络错误 |
-| 8 | 无法从响应确认认证成功 |
-| 9 | 未预期错误 |
+看到这句话后，按回车关闭窗口。以后由 Windows 自动任务运行，无需每天打开安装包。若显示“部署未完成”，请按 [使用与排障指南](docs/USAGE.md) 处理。
 
-登录验证失败会恢复安装前的文件；任务安装失败会保留已验证文件并显示原因。若 WLAN 事件日志被关闭，需按任务指南启用后重试。
+## 安装成功后，怎么确认？
 
-已验证：18 项 Python 测试、任务 XML、实际 EXE 回归、真实 UESTC 认证和现有计划任务执行。完整安装向导/UAC、全新账户、锁屏和断网重连仍未覆盖全部实机场景；版本发布不代表这些场景已经全部验收。详情见 [验证记录](docs/VALIDATION.md)。
+1. 按 `Win + R`，输入 `taskschd.msc`，按回车。
+2. 在“任务计划程序库”中找到 **`AutoLogin_SIAS`**。
+3. 右键选择“运行”，等待任务运行结束后刷新；“上次运行结果”应为 **`0x0`**。
 
-## 开发与历史版本
+也可查看日志：按 `Win + R`，粘贴下面的路径并回车，打开 `auto_login_headless.log`：
 
-- [源码构建与发布流程](docs/RELEASE.md)
-- [更新日志](CHANGELOG.md)
-- [v1.1 旧版双 EXE 部署说明](docs/LEGACY_1.1.md)
-- [全部历史 Release](https://github.com/LeeAstra/autologin-sias/releases)
+```text
+%LOCALAPPDATA%\AutoLogin_SIAS
+```
 
-旧版 v1–v4.4、V30 浏览器自动化实现仅作为历史归档；当前发布使用 Headless 后台实现。
+末尾出现 `Background login request completed successfully` 表示程序判断认证成功，再打开网页确认实际联网。上面是安装器默认路径；沿用旧目录的用户应查看任务“操作”中的实际程序位置。
 
-## 安全与许可证
+## 以后什么时候会自动运行？
 
-仅用于你有权使用的校园网账户。门户使用 HTTP 和 RC4 兼容协议，不是现代安全传输。不要提交 `.env`、账号密码、Cookie、HAR 或真实日志。详见 [安全说明](docs/SECURITY.md)。
+| 场景 | 默认行为 |
+|---|---|
+| 连接 `UESTC`，产生匹配的无线事件 | 等待约 30 秒后认证 |
+| 每天 04:10 | 新建任务会重新认证一次 |
+| 电脑正在睡眠 | 不主动唤醒；恢复后允许补跑，可能延迟 |
+| 更新已有任务 | 保留原定时计划和电源设置，不一定是默认值 |
 
-采用 [MIT License](LICENSE)。
+它按事件和时间触发，**不会持续检测网络是否掉线**。如果 Wi-Fi 没断开但认证失效，可按上面的步骤手动运行一次任务。
+
+## 常见操作
+
+- **查看日志、输入密码没反应、安装失败、升级、停用或卸载**：[使用与排障指南](docs/USAGE.md)
+- **改 Wi-Fi 名称、执行时间、重试或电源设置**：[自动任务高级指南](docs/TASK_SCHEDULER.md)
+- **反馈问题**：[提交 Issue](https://github.com/LeeAstra/autologin-sias/issues/new)。请说明版本、操作步骤和错误提示；不要上传密码或 `.env`。
+
+## 适用范围与更多资料
+
+已验证自动化测试、实际 EXE 回归、真实 UESTC 认证及现有计划任务执行。完整安装向导/UAC、全新账户、锁屏和断网重连仍有待补充实机验证，详见 [验证记录](docs/VALIDATION.md)。
+
+账号密码保存在本机 `.env` 文件中；门户使用 HTTP 和 RC4 兼容协议。仅使用你有权使用的账号，勿分享配置文件，详见 [安全说明](docs/SECURITY.md)。
+
+[更新日志](CHANGELOG.md) · [源码构建与发布](docs/RELEASE.md) · [v1.1 历史教程](docs/LEGACY_1.1.md) · [MIT 许可证](LICENSE)

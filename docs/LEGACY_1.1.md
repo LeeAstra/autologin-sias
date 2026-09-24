@@ -51,8 +51,8 @@ Background login request completed successfully
 
 ```powershell
 cd C:\AutoLogin
-.\AutoLogin_SIAS_Headless.exe
-$LASTEXITCODE
+$process = Start-Process -FilePath .\AutoLogin_SIAS_Headless.exe -WindowStyle Hidden -Wait -PassThru
+$process.ExitCode
 ```
 
 退出码为 `0` 表示本次请求成功。

@@ -93,14 +93,16 @@ AutoLogin_SIAS_Installer.exe
 
 ## 常见操作
 
-- **查看日志、输入密码没反应、安装失败、升级、停用或卸载**：[使用与排障指南](docs/USAGE.md)
-- **改 Wi-Fi 名称、执行时间、重试或电源设置**：[自动任务高级指南](docs/TASK_SCHEDULER.md)
+- **把程序迁移到 D 盘**：[修改安装位置](docs/USAGE.md#修改安装位置)
+- **VPN 全局代理挡住认证页**：[让 `2.2.2.3` 走校园网直连](docs/USAGE.md#vpn-全局代理)
+- **查看日志、安装失败、升级、停用或卸载**：[使用与排障指南](docs/USAGE.md)
+- **修改 Wi-Fi 名称、时间或电源设置**：[自动任务高级配置](docs/USAGE.md#自动任务高级配置)
 - **反馈问题**：[提交 Issue](https://github.com/LeeAstra/autologin-sias/issues/new)。请说明版本、操作步骤和错误提示；不要上传密码或 `.env`。
 
 ## 适用范围与更多资料
 
-已验证自动化测试、实际 EXE 回归、真实 UESTC 认证及现有计划任务执行。完整安装向导/UAC、全新账户、锁屏和断网重连仍有待补充实机验证，详见 [验证记录](docs/VALIDATION.md)。
+已验证自动化测试、实际 EXE 回归、真实 UESTC 认证及现有计划任务执行。完整安装向导/UAC、全新账户、锁屏和断网重连仍有待补充实机验证，详见 [验证记录](docs/DEVELOPMENT.md#验证记录)。
 
-账号密码保存在本机 `.env` 文件中；门户使用 HTTP 和 RC4 兼容协议。仅使用你有权使用的账号，勿分享配置文件，详见 [安全说明](docs/SECURITY.md)。
+账号密码保存在本机 `.env` 文件中；门户使用 HTTP 和 RC4 兼容协议。仅使用你有权使用的账号，勿分享配置文件，详见 [安全说明](docs/USAGE.md#账号与配置安全)。
 
-[更新日志](CHANGELOG.md) · [源码构建与发布](docs/RELEASE.md) · [v1.1 历史教程](docs/LEGACY_1.1.md) · [MIT 许可证](LICENSE)
+[更新日志](CHANGELOG.md) · [源码构建与发布](docs/DEVELOPMENT.md#构建与发布) · [v1.1 历史教程](https://github.com/LeeAstra/autologin-sias/blob/v1.1.0/README.md) · [MIT 许可证](LICENSE)

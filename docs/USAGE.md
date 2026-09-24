@@ -1,6 +1,6 @@
 # 使用与排障指南
 
-[返回安装教程](../README.md) · [下载 v1.2.0](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0) · [任务高级配置](TASK_SCHEDULER.md)
+[返回安装教程](../README.md) · [下载 v1.2.0](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0) · [修改安装位置](#修改安装位置) · [VPN 全局代理](#vpn-全局代理) · [任务高级配置](#自动任务高级配置)
 
 本页适用于 v1.2.0。先按 README 完成安装，遇到问题时查阅对应部分。
 
@@ -29,7 +29,7 @@
 
 v1.2.0 的 `AutoLogin_SIAS_Installer.exe` 固定安装到 `%LOCALAPPDATA%\AutoLogin_SIAS`，通常对应 **`C:\Users\你的用户名\AppData\Local\AutoLogin_SIAS`**。若系统迁移过用户目录，则以 `%LOCALAPPDATA%` 的实际位置为准，并非硬编码为 C 盘。
 
-**把安装包放到 D 盘不会改变安装目录**，安装器目前没有目录选择功能。需要沿用自定义位置的已有用户，可按本页“升级或修改账号密码”中的独立后台 EXE 方式处理。
+**把安装包放到 D 盘不会改变安装目录**，安装器目前没有目录选择功能。要把后台程序迁到其他盘，请按下方的 [修改安装位置](#修改安装位置) 操作。
 
 以下按当前 v1.2.0 发布文件大小统计，MB 使用十进制；Windows 显示值及磁盘实际分配空间可能略有不同。
 
@@ -43,6 +43,39 @@ v1.2.0 的 `AutoLogin_SIAS_Installer.exe` 固定安装到 `%LOCALAPPDATA%\AutoLo
 | 安装或运行期间的临时文件 | 单文件 EXE 还需临时解压空间，未计入上面的约 10 MB 程序占用 |
 
 如果安装包也保存在 C 盘，那么程序与安装包合计约 **26.32 MB**，再加配置、日志、任务备份及运行时临时文件。删除下载的安装包不会卸载已安装程序；删除安装目录会影响任务运行。
+
+## 修改安装位置
+
+v1.2.0 安装器不能在安装时选择目录。若要放到 D 盘，可先完成默认安装，再迁移后台程序和现有任务。下面以本机固定目录 `D:\AutoLogin` 为例；请选择自己有权限、不会同步到云端的目录。`.env` 含明文账号密码，复制前请确认新目录仅允许你信任的账户读取。
+
+1. 在任务计划程序中找到 `AutoLogin_SIAS`，先右键“禁用”；若正在运行，等它结束。记下“操作”中的旧程序路径。以下命令假设它是安装器默认目录；如果实际路径不同，请用实际目录替换 `$source`。
+2. 以当前 Windows 账户打开 PowerShell，复制后台 EXE、配置和任务脚本。不要只移动下载文件夹里的安装包。
+
+   ```powershell
+   $source = Join-Path $env:LOCALAPPDATA 'AutoLogin_SIAS'
+   $destination = 'D:\AutoLogin'
+   New-Item -ItemType Directory -Path $destination -Force | Out-Null
+   foreach ($name in 'AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env') {
+       Copy-Item -LiteralPath (Join-Path $source $name) -Destination $destination -Force
+   }
+   ```
+
+3. 先测试新目录里的程序。以下命令会进行一次真实认证；退出码应为 `0`，并可在新目录查看日志。
+
+   ```powershell
+   $check = Start-Process -FilePath 'D:\AutoLogin\AutoLogin_SIAS_Headless.exe' -ArgumentList '--check' -WorkingDirectory 'D:\AutoLogin' -WindowStyle Hidden -Wait -PassThru
+   $check.ExitCode
+   ```
+
+4. 用**同一个 Windows 账户**以管理员身份打开 PowerShell，更新已有任务的程序路径。脚本会先备份旧任务 XML，并保留已有的时间触发器、账户及电源设置。第一步禁用的任务仍需在下一步手动启用。
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'D:\AutoLogin\Install-AutoLoginTask.ps1' -ExePath 'D:\AutoLogin\AutoLogin_SIAS_Headless.exe'
+   ```
+
+5. 回到任务计划程序，检查“操作”里的程序与“起始于”都指向 `D:\AutoLogin`，启用任务，右键“运行”并确认最后结果为 `0x0`、新目录日志出现成功记录。确认后再清理旧目录中的旧 EXE 和旧 `.env`；先保留 `TaskBackups` 里的备份 XML 以便恢复。
+
+这会把约 10 MB 的后台程序移到 D 盘。任务更新脚本仍在 `%LOCALAPPDATA%\AutoLogin_SIAS\TaskBackups` 保存少量 XML 备份。以后若再次运行**一键安装器**，它仍会安装到默认位置，并把同名任务改回该位置；保留 D 盘布局时，请按本节方式更新。
 
 ## 安装时遇到问题
 
@@ -70,7 +103,7 @@ v1.2.0 的 `AutoLogin_SIAS_Installer.exe` 固定安装到 `%LOCALAPPDATA%\AutoLo
 
 以下情况会要求手动处理：存在多个 WLAN 触发器、旧操作带有参数，或运行账户采用脚本不支持的登录方式。
 
-打开任务计划程序，先导出该任务，再对照 [高级指南](TASK_SCHEDULER.md) 检查。不要为了跳过错误而直接删除原任务，否则可能丢失自定义计划或账户设置。
+打开任务计划程序，先导出该任务，再对照 [高级指南](#自动任务高级配置) 检查。不要为了跳过错误而直接删除原任务，否则可能丢失自定义计划或账户设置。
 
 ## 安装后没有自动联网
 
@@ -95,6 +128,16 @@ v1.2.0 的 `AutoLogin_SIAS_Installer.exe` 固定安装到 `%LOCALAPPDATA%\AutoLo
 | 6 / 7 | HTTP 或网络错误 |
 | 8 | 无法从响应确认认证成功 |
 | 9 | 未预期错误 |
+
+## VPN 全局代理
+
+认证门户地址是 **`http://2.2.2.3`**。有些 VPN 的全局代理或全局隧道会把发往该地址的请求带离校园网，导致浏览器打不开认证页、安装器验证失败，或自动任务不能认证。
+
+1. 保持连接 `UESTC`，暂时关闭 VPN，再访问 `http://2.2.2.3` 并运行一次认证。如果恢复正常，问题通常与 VPN 的代理或路由设置有关。
+2. 想保持 VPN 开启时，在所用 VPN 软件中查找“分流”“绕过代理”“直连”“排除路由”等设置，让 **`2.2.2.3`**（若规则要求网段，填 `2.2.2.3/32`）通过校园网直连。若软件分别设置**系统代理**和**全局/TUN 隧道**，两处都需要检查；只改浏览器代理不一定能影响后台程序。
+3. 保存设置后，在 VPN 开启的状态下重新访问 `http://2.2.2.3`，并在任务计划程序中手动运行 `AutoLogin_SIAS`；确认结果为 `0x0`、日志出现成功记录，再验证实际联网。若软件没有直连规则，使用本工具认证时先关闭 VPN。
+
+本程序通过 Python 的网络库发起请求，可能读取系统或环境代理；全局 VPN 也可能改变系统路由。不同软件的菜单名称不同，按实际界面配置即可。原理参考 [Python 代理说明](https://docs.python.org/3/library/urllib.request.html#urllib.request.ProxyHandler) 和 [Windows VPN 路由说明](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/vpn/vpn-routing)。
 
 ## 升级或修改账号密码
 
@@ -123,6 +166,115 @@ Get-FileHash -LiteralPath .\AutoLogin_SIAS_Installer.exe -Algorithm SHA256
 ```
 
 把 `Hash` 与清单中同名文件前的一整串字符对比；大小写不影响比较。应完全一致。不要拿 RC 版本的清单校验正式版本。
+## 自动任务高级配置
+
+以下内容用于更改 Wi-Fi 名称、触发时间、重试和电源设置。安装器部署成功后，不需要再运行一次任务脚本。现有任务的时间计划会保留，更新前会备份 XML。
+
+### 手动安装或更新任务
+
+v1.2.0 单文件安装包 `AutoLogin_SIAS_Installer.exe` 已整合下述脚本，完成账号输入和登录验证后会自动调用，普通用户无需再手动执行命令。[下载当前版本](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0)。它将后台程序安装到 `%LOCALAPPDATA%\AutoLogin_SIAS`；新任务与已有任务的处理规则和下文一致。以下内容用于高级手动管理。
+
+先确认已有自己的 `.env`，且手动运行后台 EXE 能认证成功；新版安装器会完成配置。把 EXE 和配置放在固定、已下载到本机的目录中。下载仓库中的 [Install-AutoLoginTask.ps1](../scripts/Install-AutoLoginTask.ps1)，或使用仓库内的副本。
+
+使用**同一个 Windows 账户**以管理员身份打开 PowerShell，在仓库根目录执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AutoLoginTask.ps1 -ExePath "C:\AutoLogin\AutoLogin_SIAS_Headless.exe"
+```
+
+如果单独下载脚本，请把 `-File` 改为脚本实际路径。`ExecutionPolicy Bypass` 仅用于该次 PowerShell 进程，不修改系统执行策略。脚本不会立即启动登录程序，也不会读取、输出或更改校园网密码。
+
+默认任务名 `AutoLogin_SIAS`，SSID 为 `UESTC`。新建任务时可以使用 `-SSID "你的校园网名称" -DailyAt "04:10" -TaskName "AutoLogin_SIAS"` 自定义。SSID 区分大小写；同时包含单引号和双引号的名称不受此脚本支持。
+
+| 项目 | 新建任务默认设置 |
+|---|---|
+| Wi-Fi 触发 | WLAN 事件 `8001` 或 `11005`，且 `SSID = UESTC` |
+| 网络准备时间 | 事件后延迟 30 秒 |
+| 定时触发 | 每天 04:10 |
+| 运行账户 | 执行安装命令的账户，S4U，不保存 Windows 密码，最低权限 |
+| 重复触发 | 忽略新实例，让当前认证完成 |
+| 超时与重试 | 最长运行 3 分钟；失败后每隔 5 分钟重试，最多 3 次 |
+| 电源 | 电池上可运行，不主动唤醒电脑 |
+| 错过定时 | 恢复可运行状态后补跑，可能延迟 |
+| 开机、用户登录触发 | 不新增 |
+
+S4U 适用于本机可读文件和本程序现有 HTTP 门户认证方式，不提供 Windows 集成网络身份验证能力，不能依赖它访问需 Windows 凭据的共享盘或加密文件。若换一个管理员账户执行，新任务也会属于那个账户，请勿这样安装。
+
+**更新已有任务时：**先导出 XML 备份到 `%LOCALAPPDATA%\AutoLogin_SIAS\TaskBackups`，再更新 WLAN 事件、30 秒延迟、重复实例策略及 EXE/工作目录。保留已有每天 04:10、旧的一次性时间触发、其他触发器、账户、重试及电源设置，不自动补建或改写已有时间计划。`-DailyAt` 仅用于新建任务。多个 WLAN 触发器、带参数的旧操作或需密码的运行账户会要求手动处理，避免静默覆盖特殊配置。
+
+先预览，不写入任务：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-AutoLoginTask.ps1 -ExePath "C:\AutoLogin\AutoLogin_SIAS_Headless.exe" -ExportOnly ".\task-preview.xml"
+```
+
+也支持 `-WhatIf`。生成的 XML 包含本机账户标识和路径，不要提交到仓库。
+
+### 手动配置
+
+按 `Win + R`，输入 `taskschd.msc`，选择“创建任务”，或打开已有任务属性。
+
+1. **常规**：名称 `AutoLogin_SIAS`。后台版可选择“不管用户是否登录都要运行”；不用管理员运行权限。若采用保存密码模式，输入的是 Windows 密码，不是校园网密码。仅在用户登录时运行也支持锁屏，但不覆盖登录前。
+2. **操作**：程序填写 EXE 完整路径；参数留空；“起始于”填写 EXE 所在文件夹，例如 `C:\AutoLogin`。
+3. **定时触发器**：每天 04:10，启用。已有一次性触发器可以保留；旧日期的一次性触发不会变成每天重复执行。
+4. **Wi-Fi 触发器**：选择“发生事件时”→“自定义”→“新建事件筛选器”→“XML”→勾选“手动编辑查询”，粘贴下方查询；高级设置延迟 30 秒。
+5. **条件**：取消“只有使用交流电源才启动”和“切换到电池时停止”；不要额外要求 Windows 判定特定网络可用。默认不勾选唤醒计算机。
+6. **设置**：允许按需运行；启用错过计划后补跑；失败后每 5 分钟重试 3 次；超过 3 分钟停止；已运行时选择“不启动新实例”。
+
+```xml
+<QueryList>
+  <Query Id="0" Path="Microsoft-Windows-WLAN-AutoConfig/Operational">
+    <Select Path="Microsoft-Windows-WLAN-AutoConfig/Operational">
+      *[System[(EventID=8001 or EventID=11005)]]
+      and
+      *[EventData[Data[@Name='SSID']='UESTC']]
+    </Select>
+  </Query>
+</QueryList>
+```
+
+`8001` 表示无线连接成功；`11005` 表示无线安全验证成功。部分快速启动或低功耗恢复过程中，会出现 `11005` 而没有新的 `8001`，只监听后者就会漏掉。`11005` 也可能在重新验证时出现，并不代表已经取得 IP 或校园网认证成功，因此延迟运行并保留失败重试。两个事件可能接连到达，“不启动新实例”避免中断认证，但不会把忽略的触发排队补跑。
+
+此筛选检查的是**事件中的 SSID**。延迟或重试期间切换网络，不会取消已安排的运行；程序目前没有执行前再次核对 SSID 的保证。每天的时间触发独立于 Wi-Fi 事件筛选。
+
+### 睡眠、关机与快速启动
+
+- 仅锁屏或关屏、系统仍在运行时，可以按时执行。
+- 默认不唤醒：04:10 处于睡眠或休眠时不会为本任务主动醒来；恢复后允许补跑，但不保证立即执行。
+- 若确实需要 04:10 唤醒，手动勾选“唤醒计算机运行此任务”，并核对系统唤醒计时器及硬件支持；关机状态不保证能由任务唤醒。
+- 不需要为此修复直接关闭快速启动；Windows 的“重启”采用完整启动路径，恢复连接后也可由无线事件触发。
+
+参考：[唤醒设置](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-waketorun)、[错过后补跑](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-startwhenavailable)、[Windows 电源状态](https://learn.microsoft.com/en-us/windows/win32/power/system-power-states)、[S4U 运行账户](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype)。
+
+### 验证、排障与恢复
+
+先在任务计划程序中手动运行一次，再检查结果和日志：
+
+```powershell
+Get-ScheduledTaskInfo -TaskName AutoLogin_SIAS
+Get-Content "C:\AutoLogin\auto_login_headless.log" -Tail 20
+```
+
+退出码 `0` 且日志出现 `Background login request completed successfully` 表示程序按自身逻辑判断成功；必要时再验证实际联网。随后在方便中断网络时测试断开/重连 `UESTC`、普通关机再开机及重启，等待约 30 秒并查看新日志。安装脚本不会代替这些端到端测试。
+
+若没有启动，打开事件查看器，查看“应用程序和服务日志 → Microsoft → Windows → WLAN-AutoConfig → Operational”是否启用，是否记录了对应 SSID 的 `8001`/`11005`。同时查看 TaskScheduler/Operational，区分事件未产生、任务未启动和程序失败。若出现启动错误，核对 EXE、工作目录和 `.env` 的访问权限及文件是否实际存在本机。
+
+这不是持续联网监控：认证失效但 Wi-Fi 不断开、事件没有被记录/接收、服务器故障持续超过重试次数，都可能需要后续触发或手动处理。每日 04:10 专门处理固定时段重新认证需求。
+
+更新前的 XML 可恢复：在任务计划程序中停用当前任务，保留备份，再用“导入任务”重新导入原 XML；同名冲突时需先删除当前任务。对于本脚本支持的 S4U/InteractiveToken 任务，也可以在管理员 PowerShell 中直接覆盖恢复：
+
+```powershell
+Register-ScheduledTask -TaskName AutoLogin_SIAS -Xml (Get-Content -LiteralPath "完整备份路径.xml" -Raw) -Force
+```
+
+恢复后检查触发器和下一次运行时间。不要把不同电脑的账户标识直接复制到本机任务中。
+
+## 账号与配置安全
+
+- `.env` 保存的是本机账号密码，**文件内容未加密**。JSON 字符串编码只是为了完整保存字符，不是加密。
+- 不要把 `.env`、整个安装目录、账号密码或原始抓包上传到 GitHub，也不要放进公开网盘链接。
+- 门户使用 HTTP 和 RC4 兼容协议；这符合当前门户的认证方式，不代表现代安全传输。仅使用自己有权使用的账户和网络。
+- 反馈问题只提供已去掉敏感内容的错误提示或相关日志片段；不要公开 Cookie、真实 MAC 地址或 HAR 文件。
 
 ## 反馈问题时提供什么？
 

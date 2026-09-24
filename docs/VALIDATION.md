@@ -1,4 +1,10 @@
-# Candidate validation and package size
+# Validation history and package size
+
+## v1.2.0 release scope
+
+v1.2.0 promotes the rc.2 implementation to the current public release and reorganizes the documentation. The only runtime-source change from rc.2 is the shared version identifier; authentication, installation and task logic are unchanged. EXEs are rebuilt with the final version and receive new checksums. The checks below are retained as historical evidence; this release does not claim full wizard/UAC, clean-account, lock-screen or reconnect acceptance.
+
+On 2026-09-24, the v1.2.0 rebuild passed all 18 Python tests, task XML tests, frozen payload/CLI checks and actual EXE response/credential/rollback regression checks. The local installer is 16,317,941 bytes. The published SHA256SUMS.txt identifies this build; do not use a checksum from an RC release.
 
 ## 1.2.0-rc.2 review follow-up
 

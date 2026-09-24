@@ -1,6 +1,8 @@
-# Development and release workflow
+# Build and release workflow
 
-Develop on `codex/<feature>` branches, open a PR and require passing Windows CI before merging. The shared source version is in `src/app_version.py`: currently **1.2.0-rc.2**. Stable release **v1.1.0** remains unchanged until real-world acceptance passes. Update the changelog with each version; never move existing release tags.
+Current public version: **v1.2.0**, marked **Latest** on GitHub. `src/app_version.py` is the single version source for the background program and installer. RC releases and v1.1.0 remain historical releases; do not mix their assets with the current release.
+
+## Build and validate
 
 Use Windows x64 and Python 3.13, preferably official CPython in a clean virtual environment:
 
@@ -11,25 +13,26 @@ python -m venv .venv
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-TaskPreview.ps1
 .\scripts\Build-Installer.ps1 -Python "$PWD\.venv\Scripts\python.exe"
 .\.venv\Scripts\python.exe tests/check_bundle.py
+.\.venv\Scripts\python.exe tests/check_frozen_login.py
 ```
 
-CI runs the tests, builds the EXEs and retains artifacts with SHA-256 checksums. It never registers system tasks or publishes a Release automatically. Build dependencies are pinned; byte-identical builds across Python distributions are not guaranteed.
+Current release assets, all from the same build:
 
-After manual acceptance, update the version/changelog, merge the reviewed PR, create a matching annotated tag and publish the installer with `SHA256SUMS.txt`. Mark RC releases as prereleases. See [VALIDATION.md](VALIDATION.md) for local results and size measurements.
+- `packaging/dist/AutoLogin_SIAS_Installer.exe`: recommended single-file deployment.
+- `packaging/dist/AutoLogin_SIAS_Headless.exe`: standalone background program for existing/custom installations.
+- `packaging/dist/SHA256SUMS.txt`: SHA-256 manifest for both EXEs.
 
-## Release checklist
+The old Setup EXE is not part of the current release. Its spec is retained only for historical compatibility. Build dependencies are pinned, but different Python distributions can produce different binary hashes.
 
-1. Run the credential audit:
+## Publish
 
-   ```powershell
-   rg -n -i "password|cookie|set-cookie|auth_tag=|pwd=|mac=|手机号|WLAN_USER=" .
-   ```
+1. Develop on a feature/release branch. Update the shared version, changelog and current-version links together.
+2. Review tracked changes for credentials, real logs and generated files. These must not be committed.
+3. Run the tests and build both EXEs. Verify frozen CLI commands, embedded payloads and checksums. Record evidence and untested scenarios in [VALIDATION.md](VALIDATION.md).
+4. Open a PR and wait for Windows CI on the final submitted commit before merging.
+5. Create a matching annotated tag on the merged commit; never move a published tag.
+6. Publish the three assets above and user-facing release notes. For a public release, explicitly mark it **Latest**. RC tags remain prereleases and do not replace the Latest download entry.
+7. Verify the public `releases/latest` endpoint points to the intended tag, and asset digests match the local binaries.
+8. Keep prior releases for rollback/history; add a link to the current release in their notes rather than deleting or replacing old artifacts.
 
-2. Confirm only placeholders appear in tracked files.
-3. Run `python src/auto_login_headless.py --version` and `--check`.
-4. Build the Windows x64 EXEs with `packaging/auto_login_headless.spec` and `packaging/auto_login_headless_setup.spec`.
-5. Put EXEs in a GitHub Release, not in the source repository.
-6. Upload `.env.example` and `scripts/Install-AutoLoginTask.ps1` alongside the EXEs, never `.env`. Link `docs/TASK_SCHEDULER.md` in the release notes.
-7. Test the downloaded EXE on a clean Windows account.
-8. Build the single-file installer with `scripts/Build-Installer.ps1`; publish `packaging/dist/AutoLogin_SIAS_Installer.exe` as the recommended download. It embeds the freshly built headless EXE and task script.
-9. Test installation, invalid credentials, denied UAC, reinstallation, existing task preservation, and Wi-Fi reconnection on Windows. Use the same administrator account throughout; cross-account elevation is unsupported. Confirm the installed files persist after deleting the downloaded installer.
+CI creates build artifacts but does not publish Releases automatically. Publishing does not imply that untested scenarios have passed: the current validation report explicitly retains the full wizard/UAC, clean-account, lock-screen and reconnect limitations.

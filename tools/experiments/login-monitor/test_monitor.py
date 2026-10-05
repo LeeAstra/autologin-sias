@@ -21,6 +21,16 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(monitor.combine('authenticated', 'auth_required'), 'unknown')
         self.assertEqual(monitor.combine('auth_required', 'unknown'), 'auth_required')
 
+    def test_info_only_accepts_verified_needauth_path(self):
+        for location, expected in [('http://2.2.2.3:80/ac_portal/needauth.html?x=ignored','auth_required'),
+                                   ('http://2.2.2.3/ac_portal/proxy.html','unknown'),
+                                   ('http://2.2.2.3/ac_portal/template/pc.html','unknown'),
+                                   ('http://other.example/ac_portal/needauth.html','unknown'),
+                                   ('http://2.2.2.3:bad/ac_portal/needauth.html','unknown')]:
+            with self.subTest(location=location):
+                self.assertEqual(monitor.info_state(200, {'success':False,'location':location}), expected)
+        self.assertEqual(monitor.route('http://2.2.2.3:bad/ac_portal/proxy.html'),'unknown')
+
     def test_observed_loss_count_recovery_and_censoring(self):
         tracker = monitor.Tracker()
         tracker.observe('auth_required', 'initial')

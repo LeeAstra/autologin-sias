@@ -55,7 +55,7 @@ def install(payload, target, username, password, runner=subprocess.run):
                 changed.append(path)
         replace_file(config, lambda staged: write_env_file(staged, username, password))
         changed.append(config)
-        result = runner([str(exe), '--check'], cwd=str(target), env=child_env, timeout=90)
+        result = runner([str(exe), '--validate-credentials'], cwd=str(target), env=child_env, timeout=90)
         if result.returncode:
             raise RuntimeError(f'登录验证失败（退出码 {result.returncode}），请检查校园网连接、账号及日志。')
     except BaseException:

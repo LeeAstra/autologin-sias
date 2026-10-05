@@ -16,6 +16,8 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r requirements-build.txt
       - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s tools/experiments/login-diagnostics -v
+      - run: python -m unittest discover -s tools/experiments/login-monitor -v
       - shell: powershell
         run: .\tests\Test-TaskPreview.ps1
       - shell: powershell

@@ -2,6 +2,18 @@
 .env
 *.log
 *.har
+night_results/
+night-monitor/results/
+login-diagnostics/results/
+login-diagnostics/*.exe
+login-diagnostics/*.spec
+login-monitor/results/
+login-monitor/*.exe
+login-monitor/*.spec
+tools/experiments/**/results/
+tools/experiments/**/*.exe
+tools/experiments/**/*.spec
+tools/experiments/**/BUILD-INFO.json
 
 # Python
 __pycache__/

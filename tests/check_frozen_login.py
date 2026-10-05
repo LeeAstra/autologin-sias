@@ -20,7 +20,7 @@ from credentials import write_env_file
 from auto_login_headless import rc4_hex
 
 requests = []
-response = {'body': b'{"success":true}', 'status': 200}
+response = {'body': b'{"success":true}', 'status': 200, 'prior': 'auth_required', 'post': 'authenticated'}
 
 
 class PortalProxy(BaseHTTPRequestHandler):
@@ -37,9 +37,20 @@ class PortalProxy(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers['Content-Length']))
         requests.append(('POST', self.path, body, self.headers.get('Cookie')))
         is_login = self.path.endswith('/ac_portal/login.php')
+        is_info = self.path.endswith('/homepage/info.php')
         self.send_response(response['status'] if is_login else 200)
         self.end_headers()
-        self.wfile.write(response['body'] if is_login else b'1')
+        if is_info:
+            state = response['post'] if any(r[1].endswith('/ac_portal/login.php') for r in requests) else response['prior']
+            if state == 'authenticated':
+                payload = b'{"success":true,"data":{"basic":{}}}'
+            elif state == 'auth_required':
+                payload = b'{"success":false,"location":"http://2.2.2.3:80/ac_portal/needauth.html"}'
+            else:
+                payload = b'unrecognized info'
+            self.wfile.write(payload)
+        else:
+            self.wfile.write(response['body'] if is_login else b'1')
 
 
 server = ThreadingHTTPServer(('127.0.0.1', 0), PortalProxy)
@@ -69,19 +80,29 @@ try:
             requests.clear()
             result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
             assert result.returncode == expected, (label, result.returncode, expected)
-            posts = [r for r in requests if r[0] == 'POST']
+            posts = [r for r in requests if r[1].endswith('/ac_portal/login.php')]
             assert posts and posts[0][3] == 'session=frozen-test', label
             assert b'userName=synthetic-user' in posts[0][2], label
             assert b'pwd=synthetic-password' not in posts[0][2], label
             print(f'Frozen EXE: {label} -> {result.returncode} OK')
 
-        response.update(body=b'{"success":true}', status=200)
+        for prior, post, expected in [('authenticated', 'unknown', 0), ('unknown', 'authenticated', 0),
+                                      ('auth_required', 'auth_required', 8), ('auth_required', 'unknown', 8)]:
+            response.update(body=b'{"success":true}', status=200, prior=prior, post=post)
+            requests.clear()
+            result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
+            assert result.returncode == expected, (prior, post, result.returncode)
+            login_requests = [r for r in requests if r[1].endswith('/ac_portal/login.php')]
+            assert bool(login_requests) == (prior != 'authenticated')
+            print(f'Frozen EXE: prior={prior} post={post} -> {expected} OK')
+
+        response.update(body=b'{"success":true}', status=200, prior='auth_required', post='authenticated')
         for password in [' spaced-password ', '"quoted-password"', r'back\slash']:
             write_env_file(work / '.env', 'synthetic-user', password)
             requests.clear()
             result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
             assert result.returncode == 0
-            form = parse_qs(next(r[2] for r in requests if r[0] == 'POST').decode())
+            form = parse_qs(next(r[2] for r in requests if r[1].endswith('/ac_portal/login.php')).decode())
             assert form['pwd'][0] == rc4_hex(password, form['auth_tag'][0])
         print('Frozen EXE: whitespace, quotes and backslashes preserved through encryption OK')
 
@@ -102,11 +123,13 @@ try:
             return subprocess.run(args, **kwargs)
 
         response.update(body=b'{"success":true}', status=200)
+        requests.clear()
         install_autologin.install(fixture_payload, target, 'synthetic-user', 'synthetic-password', run_child)
         assert len(task_calls) == 1
         assert (target / exe_source.name).read_bytes() == exe_source.read_bytes()
         old_config = (target / '.env').read_bytes()
         response.update(body=b'{"success":false}')
+        requests.clear()
         try:
             install_autologin.install(fixture_payload, target, 'other-user', 'other-password', run_child)
             raise AssertionError('Rejected authentication accepted by installer')

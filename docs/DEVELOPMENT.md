@@ -4,6 +4,14 @@
 
 ## 构建与发布
 
+### 2026-10-05 工作区候选：先检测再登录
+
+基于独立实验的既有接口证据调整正式程序的单次执行流程；未改安装器、任务脚本、触发时间或电源条件。原有本地循环实验及其 EXE 保留，继续使用原监测 EXE 保持夜间实验版本一致。供公开维护的源码整理到 `tools/experiments/`，独立目录和 CI 另行验证。
+
+验证：22 项源码单元/本机 HTTP 集成测试通过；新构建 `packaging/dist/AutoLogin_SIAS_Headless.exe` 的本机代理回归通过，覆盖已认证跳过、未知状态继续认证、响应成功但后状态未确认返回 8、原失败退出码、特殊字符密码，以及使用真实子 EXE 的模拟安装成功和失败回滚。测试使用合成凭据，不访问真实门户、不注册 Windows 任务。新版尚未进行真实校园网验证，也未替换已安装 EXE。
+
+构建环境：本机 Anaconda Python 3.13.5 / PyInstaller 6.17.0。该阶段仅构建后台候选，未更新公开 v1.2.0 资产。v1.3.0-rc.1 安装器与后台程序需重新从同一提交构建，校验值以该 Release 的 SHA256SUMS.txt 为准。
+
 Current public version: **v1.2.0**, marked **Latest** on GitHub. `src/app_version.py` is the single version source for the background program and installer. RC releases and v1.1.0 remain historical releases; do not mix their assets with the current release.
 
 ### Build and validate

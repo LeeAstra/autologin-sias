@@ -19,7 +19,7 @@ import sys
 import time
 from http.cookiejar import CookieJar
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 from app_version import VERSION
 from credentials import load_env_file, write_env_file
@@ -36,6 +36,7 @@ PORTAL_PAGE = (
 )
 LOGIN_URL = PORTAL_ORIGIN + "/ac_portal/login.php"
 CHECK_JUMP_URL = PORTAL_ORIGIN + "/httpscert/handler_checkjump"
+INFO_URL = PORTAL_ORIGIN + "/homepage/info.php"
 TIMEOUT_SECONDS = 12
 
 
@@ -246,7 +247,66 @@ def response_indicates_success(body: bytes) -> tuple[bool | None, str]:
     return None, "unrecognized JSON response"
 
 
+def authentication_state(status: int, body: bytes) -> tuple[str, str]:
+    """Classify the verified info interface without retaining personal fields."""
+    if status != 200:
+        return "unknown", "unexpected_http_status"
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeError):
+        return "unknown", "invalid_json"
+    if not isinstance(payload, dict):
+        return "unknown", "unexpected_structure"
+    data = payload.get("data")
+    if (payload.get("success") is True and isinstance(data, dict)
+            and isinstance(data.get("basic"), dict)):
+        return "authenticated", "info_basic_present"
+    location = payload.get("location")
+    if payload.get("success") is False and isinstance(location, str):
+        try:
+            target = urlparse(location)
+            portal = urlparse(PORTAL_ORIGIN)
+            if (target.scheme == portal.scheme and target.hostname == portal.hostname
+                    and (target.port or 80) == (portal.port or 80)
+                    and target.path == "/ac_portal/needauth.html"):
+                return "auth_required", "info_needauth_location"
+        except ValueError:
+            pass
+    return "unknown", "unexpected_structure"
+
+
+def query_authentication_state() -> tuple[str, str]:
+    # A fresh session for each observation; preserve the existing proxy behavior.
+    try:
+        status, body = request(build_portal_opener(), INFO_URL, data={"opr": "list"})
+        return authentication_state(status, body)
+    except Exception as exc:
+        # Error text/response contents can contain identifiers; record only type.
+        return "unknown", type(exc).__name__
+
+
 def run_login() -> int:
+    started = time.monotonic()
+    outcome = {"prior_state": "not_checked", "action": "none",
+               "login_response_result": None, "post_state": "not_checked",
+               "confirmed": False}
+    code = 9
+    try:
+        code = _run_login_once(outcome)
+        return code
+    except Exception as exc:
+        LOGGER.error("Unexpected error: %s", type(exc).__name__)
+        return code
+    finally:
+        LOGGER.info(
+            "Authentication summary: prior_state=%s action=%s "
+            "login_response_result=%s post_state=%s confirmed=%s exit_code=%s duration=%.3fs",
+            outcome["prior_state"], outcome["action"], outcome["login_response_result"],
+            outcome["post_state"], outcome["confirmed"], code, time.monotonic() - started,
+        )
+
+
+def _run_login_once(outcome: dict) -> int:
     config = load_env_file(ENV_PATH)
     username = os.getenv("WLAN_USER") or config.get("WLAN_USER", "")
     password = os.getenv("WLAN_PWD") or config.get("WLAN_PWD", "")
@@ -254,6 +314,15 @@ def run_login() -> int:
     if not username or not password:
         LOGGER.error("Missing WLAN_USER or WLAN_PWD in %s", ENV_PATH)
         return 2
+
+    prior_state, prior_reason = query_authentication_state()
+    outcome["prior_state"] = prior_state
+    LOGGER.info("Authentication before login: prior_state=%s reason=%s", prior_state, prior_reason)
+    if prior_state == "authenticated":
+        outcome.update(action="skip", confirmed=True)
+        LOGGER.info("already_authenticated: skipping login; portal authentication confirmed")
+        return 0
+    outcome["action"] = "login"
 
     auth_tag = str(int(time.time() * 1000))
     encrypted_password = rc4_hex(password, auth_tag)
@@ -275,6 +344,7 @@ def run_login() -> int:
             },
         )
         success, reason = response_indicates_success(login_body)
+        outcome["login_response_result"] = success
         LOGGER.info(
             "Login response: status=%s bytes=%s result=%s (%s)",
             login_status,
@@ -300,16 +370,24 @@ def run_login() -> int:
             LOGGER.error("Cannot confirm authentication from the portal response")
             return 8
 
+        post_state, post_reason = query_authentication_state()
+        outcome["post_state"] = post_state
+        outcome["confirmed"] = post_state == "authenticated"
+        LOGGER.info("Authentication after login: post_state=%s reason=%s", post_state, post_reason)
+        if post_state != "authenticated":
+            LOGGER.error("Login response succeeded but portal authentication is not confirmed")
+            return 8
+
         LOGGER.info("Background login request completed successfully")
         return 0
     except HTTPError as exc:
-        LOGGER.error("HTTP error: %s %s", exc.code, exc.reason)
+        LOGGER.error("HTTP error: %s", exc.code)
         return 6
     except (URLError, TimeoutError, socket.timeout, OSError) as exc:
-        LOGGER.error("Network error: %s", exc)
+        LOGGER.error("Network error: %s", type(exc).__name__)
         return 7
-    except Exception:
-        LOGGER.exception("Unexpected error")
+    except Exception as exc:
+        LOGGER.error("Unexpected error: %s", type(exc).__name__)
         return 9
 
 

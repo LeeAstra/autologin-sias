@@ -12,7 +12,7 @@
 
 构建环境：本机 Anaconda Python 3.13.5 / PyInstaller 6.17.0。该阶段仅构建后台候选，未更新公开 v1.2.0 资产。v1.3.0-rc.1 安装器与后台程序需重新从同一提交构建，校验值以该 Release 的 SHA256SUMS.txt 为准。
 
-Current public version: **v1.2.0**, marked **Latest** on GitHub. `src/app_version.py` is the single version source for the background program and installer. RC releases and v1.1.0 remain historical releases; do not mix their assets with the current release.
+Current public version: **v1.2.0**, marked **Latest** on GitHub. `src/sias_autologin/version.py` is the single version source for the background program and installer. RC releases and v1.1.0 remain historical releases; do not mix their assets with the current release.
 
 ### Build and validate
 
@@ -50,6 +50,13 @@ The old Setup EXE is not part of the current release. Its spec is retained only 
 CI creates build artifacts but does not publish Releases automatically. Publishing does not imply that untested scenarios have passed: the current validation report explicitly retains the full wizard/UAC, clean-account, lock-screen and reconnect limitations.
 
 ## 验证记录
+
+### 2026-10-05 分层重构
+
+认证核心、CLI/配置和 Windows 适配分离，详见 [代码结构](ARCHITECTURE.md)。旧源码入口和命令脚本继续兼容；正式任务脚本迁移前后逐行一致。源码版本仍为 1.3.0-rc.1，本次源码修改尚未发布新的 Release 资产。
+
+本机通过 29 项正式测试、5 项诊断测试和4 项监测测试；1 项依赖本地抓包资料的测试跳过。两个 EXE 构建成功，安装包载荷/版本检查与实际 EXE 本机模拟认证和安装回滚回归通过。使用合成凭据，不注册系统任务。新增 Linux 核心 CI 验证导入边界、直接 API 和旧接口。
+
 
 ### v1.2.0 release scope
 

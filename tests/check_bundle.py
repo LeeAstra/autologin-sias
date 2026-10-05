@@ -11,7 +11,7 @@ bundle = dist / 'AutoLogin_SIAS_Installer.exe'
 archive = CArchiveReader(str(bundle))
 for name, source in {
     'AutoLogin_SIAS_Headless.exe': dist / 'AutoLogin_SIAS_Headless.exe',
-    'Install-AutoLoginTask.ps1': root / 'scripts' / 'Install-AutoLoginTask.ps1',
+    'Install-AutoLoginTask.ps1': root / 'scripts' / 'windows' / 'Install-AutoLoginTask.ps1',
 }.items():
     key = next(k for k in archive.toc if k.replace('\\', '/') == 'payload/' + name)
     assert archive.extract(key) == source.read_bytes(), f'Payload mismatch: {name}'

@@ -1,431 +1,77 @@
-"""SIAS campus network background login.
-
-This version does not open a browser or use desktop automation, so it can run
-while Windows is locked. Credentials are loaded from a .env file beside the
-executable (or beside this source file when run as Python).
-"""
-
-from __future__ import annotations
-
-import json
-import argparse
-import getpass
+"""Compatibility entry point; portable business code lives in sias_autologin.core."""
 import logging
-from logging.handlers import RotatingFileHandler
 import os
-import re
-from pathlib import Path
-import socket
 import sys
 import time
-from http.cookiejar import CookieJar
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
-from urllib.request import HTTPCookieProcessor, Request, build_opener
-from app_version import VERSION
-from credentials import load_env_file, write_env_file
-
+from sias_autologin import cli
+from sias_autologin.version import VERSION
+from sias_autologin.config import load_env_file, write_env_file
+from sias_autologin.core import portal, state, service
+from sias_autologin.core.authentication import rc4_hex, response_indicates_success
+from sias_autologin.core.portal import (
+    PORTAL_ORIGIN, PORTAL_PAGE, LOGIN_URL, CHECK_JUMP_URL, INFO_URL,
+    TIMEOUT_SECONDS, PortalSettings, PortalClient, build_portal_opener,
+)
 
 APP_NAME = "AutoLogin_SIAS_Headless"
-PORTAL_ORIGIN = "http://2.2.2.3"
-PORTAL_PAGE = (
-    PORTAL_ORIGIN
-    + "/ac_portal/20210120210326/pc.html"
-    + "?template=20210120210326&tabs=pwd&vlanid=0&_ID_=0"
-    + "&switch_url=&url=http://2.2.2.3/homepage/index.html"
-    + "&controller_type="
-)
-LOGIN_URL = PORTAL_ORIGIN + "/ac_portal/login.php"
-CHECK_JUMP_URL = PORTAL_ORIGIN + "/httpscert/handler_checkjump"
-INFO_URL = PORTAL_ORIGIN + "/homepage/info.php"
-TIMEOUT_SECONDS = 12
-
-
-def application_dir() -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
-
-
+application_dir = cli.application_dir
 BASE_DIR = application_dir()
 LOG_PATH = BASE_DIR / "auto_login_headless.log"
 
-
-def find_env_path() -> Path:
-    """Prefer a private .env beside the EXE, with local-project fallbacks."""
-    candidates = [BASE_DIR / ".env"]
-    if BASE_DIR.parent != BASE_DIR:
-        candidates.append(BASE_DIR.parent / ".env")
-    candidates.append(Path.cwd() / ".env")
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return candidates[0]
-
+def find_env_path():
+    return cli.find_env_path(BASE_DIR)
 
 ENV_PATH = find_env_path()
-
-
-def configure_logging() -> logging.Logger:
-    logger = logging.getLogger(APP_NAME)
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
-
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    try:
-        handler = RotatingFileHandler(
-            LOG_PATH,
-            maxBytes=512 * 1024,
-            backupCount=2,
-            encoding="utf-8",
-        )
-    except OSError:
-        fallback_dir = Path(os.environ.get("TEMP", "."))
-        fallback = fallback_dir / f"auto_login_headless_{os.getpid()}.log"
-        try:
-            handler = RotatingFileHandler(
-                fallback,
-                maxBytes=512 * 1024,
-                backupCount=2,
-                encoding="utf-8",
-            )
-        except OSError:
-            # Last resort: keep console logging available; scheduled mode still works.
-            handler = logging.NullHandler()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-    if sys.stdout is not None:
-        console = logging.StreamHandler(sys.stdout)
-        console.setFormatter(formatter)
-        logger.addHandler(console)
-    return logger
-
-
 LOGGER = logging.getLogger(APP_NAME)
 LOGGER.addHandler(logging.NullHandler())
 
+def configure_logging():
+    return cli.configure_logging(LOG_PATH, APP_NAME)
 
-def setup_env() -> int:
-    """Interactive first-run configuration; never used by scheduled mode."""
-    target = BASE_DIR / ".env"
-    print(f"{APP_NAME} {VERSION} 配置向导")
-    print(f"配置文件：{target}")
-    if target.exists():
-        answer = input("配置文件已存在，是否覆盖？[y/N]: ").strip().lower()
-        if answer not in {"y", "yes", "是"}:
-            print("已取消，不会修改现有配置。")
-            return 0
+def setup_env():
+    return cli.setup_env(sys.modules[__name__])
 
-    username = input("校园网账号：").strip()
-    password = getpass.getpass("校园网密码（输入时不会显示）：")
-    if not username or not password:
-        print("账号和密码都不能为空。")
-        return 2
+parse_args = cli.parse_args
 
-    try:
-        write_env_file(target, username, password)
-    except OSError as exc:
-        print(f"无法写入配置文件：{exc}")
-        return 3
+def settings():
+    return PortalSettings(PORTAL_ORIGIN, PORTAL_PAGE, LOGIN_URL, CHECK_JUMP_URL,
+                          INFO_URL, TIMEOUT_SECONDS)
 
-    global ENV_PATH
-    ENV_PATH = target
-    print("配置已保存，正在测试后台登录……")
-    result = run_login(validate_credentials=True)
-    if result == 0:
-        print("配置测试成功。之后可将无窗口 EXE 加入定时任务。")
-    else:
-        print(f"配置已保存，但登录测试失败（退出码 {result}）。请查看日志：{LOG_PATH}")
-    return result
+def request(opener, url, *, data=None):
+    return portal.request(opener, url, data=data, settings=settings())
 
+def authentication_state(status, body):
+    return state.authentication_state(status, body, portal_origin=PORTAL_ORIGIN)
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="SIAS campus network background login")
-    parser.add_argument("--setup", action="store_true", help="运行首次配置向导")
-    parser.add_argument("--check", action="store_true", help="读取现有配置并测试登录")
-    parser.add_argument("--validate-credentials", action="store_true", help="提交并验证配置凭据，即使当前已认证")
-    parser.add_argument("--version", action="store_true", help="显示版本")
-    return parser.parse_args()
+class _CompatibilityClient(PortalClient):
+    def build_opener(self):
+        return build_portal_opener()
 
+    def request(self, opener, url, *, data=None):
+        return request(opener, url, data=data)
 
-def rc4_hex(plain_text: str, key_text: str) -> str:
-    """Match the portal's do_encrypt_rc4() JavaScript implementation."""
-    key_text = str(key_text)
-    if not key_text:
-        raise ValueError("RC4 key is empty")
+    def query_state(self):
+        return query_authentication_state()
 
-    key = [ord(key_text[i % len(key_text)]) for i in range(256)]
-    sbox = list(range(256))
+def query_authentication_state():
+    return state.query_authentication_state(_CompatibilityClient(settings()))
 
-    j = 0
-    for i in range(256):
-        j = (j + sbox[i] + key[i]) % 256
-        sbox[i], sbox[j] = sbox[j], sbox[i]
-
-    a = 0
-    b = 0
-    output: list[str] = []
-    for character in plain_text:
-        a = (a + 1) % 256
-        b = (b + sbox[a]) % 256
-        sbox[a], sbox[b] = sbox[b], sbox[a]
-        c = (sbox[a] + sbox[b]) % 256
-        output.append(f"{ord(character) ^ sbox[c]:02x}")
-    return "".join(output)
-
-
-def build_portal_opener():
-    return build_opener(HTTPCookieProcessor(CookieJar()))
-
-
-def request(opener, url: str, *, data: dict[str, str] | None = None) -> tuple[int, bytes]:
-    encoded = None if data is None else urlencode(data).encode("utf-8")
-    headers = {
-        "Accept": "*/*",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoLogin-SIAS/1.0",
-    }
-    if data is not None:
-        headers.update(
-            {
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                "Origin": PORTAL_ORIGIN,
-                "Referer": PORTAL_PAGE,
-                "X-Requested-With": "XMLHttpRequest",
-            }
-        )
-    req = Request(url, data=encoded, headers=headers, method="POST" if encoded else "GET")
-    with opener.open(req, timeout=TIMEOUT_SECONDS) as response:
-        return response.status, response.read()
-
-
-def response_indicates_success(body: bytes) -> tuple[bool | None, str]:
-    text = body.decode("utf-8", errors="replace").strip()
-    if not text:
-        return None, "empty response"
-
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        # The portal uses a JavaScript object with single quotes. Parse its
-        # top-level boolean field before inspecting message text; never eval it.
-        tokens = re.findall(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[{}\[\]:,]|[A-Za-z_][A-Za-z_0-9]*", text)
-        depth = 0
-        for index, token in enumerate(tokens):
-            if token in ("{", "["):
-                depth += 1
-            elif token in ("}", "]"):
-                depth -= 1
-            elif (depth == 1 and token.strip("\"'").lower() == "success"
-                  and index > 0 and tokens[index - 1] in ("{", ",")
-                  and tokens[index + 1:index + 2] == [":"]
-                  and tokens[index + 2:index + 3] in (["true"], ["false"])):
-                return tokens[index + 2] == "true", "portal success boolean field"
-        lowered = text.lower()
-        if any(word in lowered for word in ("error", "fail", "invalid", "wrong", "密码错误")):
-            return False, "failure marker in response"
-        if any(word in lowered for word in ("logon success", "login ok", "登录成功")):
-            return True, "success marker in response"
-        return None, f"unrecognized response ({len(body)} bytes)"
-
-    if isinstance(payload, dict):
-        success = payload.get("success")
-        if isinstance(success, bool):
-            return success, "JSON success field"
-        if success in (1, "1", "true", "True"):
-            return True, "JSON success field"
-        if success in (0, "0", "false", "False"):
-            return False, "JSON success field"
-
-        for key in ("result", "status", "code"):
-            value = payload.get(key)
-            if isinstance(value, bool):
-                return value, f"JSON {key} field"
-            normalized = str(value).lower()
-            if normalized in ("success", "ok", "1", "200", "0"):
-                return True, f"JSON {key} field"
-            if normalized in ("fail", "failed", "error", "-1"):
-                return False, f"JSON {key} field"
-
-        message = str(payload.get("msg") or payload.get("message") or "")
-        lowered = message.lower()
-        if any(word in lowered for word in ("成功", "success", "already", "在线")):
-            return True, "JSON message"
-        if any(word in lowered for word in ("失败", "错误", "error", "fail", "密码")):
-            return False, "JSON message"
-
-    return None, "unrecognized JSON response"
-
-
-def authentication_state(status: int, body: bytes) -> tuple[str, str]:
-    """Classify the verified info interface without retaining personal fields."""
-    if status != 200:
-        return "unknown", "unexpected_http_status"
-    try:
-        payload = json.loads(body)
-    except (ValueError, UnicodeError):
-        return "unknown", "invalid_json"
-    if not isinstance(payload, dict):
-        return "unknown", "unexpected_structure"
-    data = payload.get("data")
-    if (payload.get("success") is True and isinstance(data, dict)
-            and isinstance(data.get("basic"), dict)):
-        return "authenticated", "info_basic_present"
-    location = payload.get("location")
-    if payload.get("success") is False and isinstance(location, str):
-        try:
-            target = urlparse(location)
-            portal = urlparse(PORTAL_ORIGIN)
-            if (target.scheme == portal.scheme and target.hostname == portal.hostname
-                    and (target.port or 80) == (portal.port or 80)
-                    and target.path == "/ac_portal/needauth.html"):
-                return "auth_required", "info_needauth_location"
-        except ValueError:
-            pass
-    return "unknown", "unexpected_structure"
-
-
-def query_authentication_state() -> tuple[str, str]:
-    # A fresh session for each observation; preserve the existing proxy behavior.
-    try:
-        status, body = request(build_portal_opener(), INFO_URL, data={"opr": "list"})
-        return authentication_state(status, body)
-    except Exception as exc:
-        # Error text/response contents can contain identifiers; record only type.
-        return "unknown", type(exc).__name__
-
-
-def run_login(*, validate_credentials: bool = False) -> int:
+def run_login(*, validate_credentials=False):
     started = time.monotonic()
-    outcome = {"prior_state": "not_checked", "action": "none",
-               "login_response_result": None, "post_state": "not_checked",
-               "confirmed": False}
-    code = 9
     try:
-        code = _run_login_once(outcome, validate_credentials=validate_credentials)
-        return code
+        config = load_env_file(ENV_PATH)
+        username = os.getenv("WLAN_USER") or config.get("WLAN_USER", "")
+        password = os.getenv("WLAN_PWD") or config.get("WLAN_PWD", "")
     except Exception as exc:
         LOGGER.error("Unexpected error: %s", type(exc).__name__)
-        return code
-    finally:
         LOGGER.info(
-            "Authentication summary: prior_state=%s action=%s "
-            "login_response_result=%s post_state=%s confirmed=%s exit_code=%s duration=%.3fs",
-            outcome["prior_state"], outcome["action"], outcome["login_response_result"],
-            outcome["post_state"], outcome["confirmed"], code, time.monotonic() - started,
+            "Authentication summary: prior_state=not_checked action=none "
+            "login_response_result=None post_state=not_checked confirmed=False "
+            "exit_code=9 duration=%.3fs", time.monotonic() - started,
         )
-
-
-def _run_login_once(outcome: dict, *, validate_credentials: bool = False) -> int:
-    config = load_env_file(ENV_PATH)
-    username = os.getenv("WLAN_USER") or config.get("WLAN_USER", "")
-    password = os.getenv("WLAN_PWD") or config.get("WLAN_PWD", "")
-
-    if not username or not password:
-        LOGGER.error("Missing WLAN_USER or WLAN_PWD in %s", ENV_PATH)
-        return 2
-
-    prior_state, prior_reason = query_authentication_state()
-    outcome["prior_state"] = prior_state
-    LOGGER.info("Authentication before login: prior_state=%s reason=%s", prior_state, prior_reason)
-    if prior_state == "authenticated" and not validate_credentials:
-        outcome.update(action="skip", confirmed=True)
-        LOGGER.info("already_authenticated: skipping login; portal authentication confirmed")
-        return 0
-    outcome["action"] = "login"
-    LOGGER.info("Credential validation requested: %s", validate_credentials)
-
-    auth_tag = str(int(time.time() * 1000))
-    encrypted_password = rc4_hex(password, auth_tag)
-    opener = build_portal_opener()
-
-    try:
-        portal_status, _ = request(opener, PORTAL_PAGE)
-        LOGGER.info("Portal page status: %s", portal_status)
-
-        login_status, login_body = request(
-            opener,
-            LOGIN_URL,
-            data={
-                "opr": "pwdLogin",
-                "userName": username,
-                "pwd": encrypted_password,
-                "auth_tag": auth_tag,
-                "rememberPwd": "0",
-            },
-        )
-        success, reason = response_indicates_success(login_body)
-        outcome["login_response_result"] = success
-        LOGGER.info(
-            "Login response: status=%s bytes=%s result=%s (%s)",
-            login_status,
-            len(login_body),
-            success,
-            reason,
-        )
-
-        jump_status, jump_body = request(
-            opener,
-            CHECK_JUMP_URL,
-            data={"vlanid": "0"},
-        )
-        LOGGER.info("Jump check: status=%s bytes=%s", jump_status, len(jump_body))
-
-        if login_status != 200 or jump_status != 200:
-            LOGGER.error("Portal returned an unexpected HTTP status")
-            return 4
-        if success is False:
-            LOGGER.error("Portal explicitly rejected the login")
-            return 5
-        if success is None:
-            LOGGER.error("Cannot confirm authentication from the portal response")
-            return 8
-
-        post_state, post_reason = query_authentication_state()
-        outcome["post_state"] = post_state
-        outcome["confirmed"] = post_state == "authenticated"
-        LOGGER.info("Authentication after login: post_state=%s reason=%s", post_state, post_reason)
-        if post_state != "authenticated":
-            LOGGER.error("Login response succeeded but portal authentication is not confirmed")
-            return 8
-
-        LOGGER.info("Background login request completed successfully")
-        return 0
-    except HTTPError as exc:
-        LOGGER.error("HTTP error: %s", exc.code)
-        return 6
-    except (URLError, TimeoutError, socket.timeout, OSError) as exc:
-        LOGGER.error("Network error: %s", type(exc).__name__)
-        return 7
-    except Exception as exc:
-        LOGGER.error("Unexpected error: %s", type(exc).__name__)
         return 9
-
+    return service.ensure_authenticated(username, password, client=_CompatibilityClient(settings()),
+                                        logger=LOGGER, validate_credentials=validate_credentials)
 
 if __name__ == "__main__":
-    arguments = parse_args()
-    if arguments.version:
-        print(f"{APP_NAME} {VERSION}")
-        sys.exit(0)
-    LOGGER = configure_logging()
-    setup_executable = (
-        getattr(sys, "frozen", False)
-        and Path(sys.executable).stem.lower() == "autologin_sias_setup"
-    )
-    direct_setup = setup_executable and len(sys.argv) == 1
-    if arguments.setup or direct_setup:
-        setup_result = setup_env()
-        if direct_setup:
-            try:
-                input("按回车键关闭窗口……")
-            except EOFError:
-                pass
-        sys.exit(setup_result)
-    # --check and the no-argument scheduled mode both execute one login check.
-    sys.exit(run_login(validate_credentials=arguments.validate_credentials))
+    sys.exit(cli.main(sys.modules[__name__]))

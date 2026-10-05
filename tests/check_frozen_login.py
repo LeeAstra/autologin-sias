@@ -112,7 +112,7 @@ try:
         fixture_payload = work / 'payload'
         fixture_payload.mkdir()
         shutil.copy2(exe_source, fixture_payload / exe_source.name)
-        shutil.copy2(root / 'scripts/Install-AutoLoginTask.ps1', fixture_payload)
+        shutil.copy2(root / 'scripts/windows/Install-AutoLoginTask.ps1', fixture_payload)
         target = work / 'installed'
         task_calls = []
 

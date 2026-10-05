@@ -4,7 +4,7 @@
 
 ## 修改与验证
 
-正式认证程序在 `src/`，安装与任务脚本在 `scripts/`，实验工具在 `tools/experiments/`。实验代码不纳入安装包。改动任务条件或认证协议时，必须在 PR 中明确说明；普通状态检测调整不应顺带改变触发时间或电源设置。
+分层设计与跨平台开发入口见 [代码结构](docs/ARCHITECTURE.md)。正式认证程序在 `src/`，安装与任务脚本在 `scripts/`，实验工具在 `tools/experiments/`。实验代码不纳入安装包。改动任务条件或认证协议时，必须在 PR 中明确说明；普通状态检测调整不应顺带改变触发时间或电源设置。
 
 安装构建依赖后，在 Windows / Python 3.13 运行：
 
@@ -23,7 +23,7 @@ python tests/check_frozen_login.py
 
 ## 版本与发布
 
-`src/app_version.py` 为唯一版本来源。新增向后兼容功能递增次版本，修复递增补丁版本；未完成必要实机验证时使用 `-rc.N` 预发布。同步维护 `CHANGELOG.md`、说明和 Release，标签为 `v版本号`，指向实际验证过的提交。
+`src/sias_autologin/version.py` 为唯一版本来源。新增向后兼容功能递增次版本，修复递增补丁版本；未完成必要实机验证时使用 `-rc.N` 预发布。同步维护 `CHANGELOG.md`、说明和 Release，标签为 `v版本号`，指向实际验证过的提交。
 
 合并前 CI 必须通过。安装器和后台 EXE 从同一提交构建并验证，发布二者及 `SHA256SUMS.txt`；EXE 放在 Release Assets，不能提交到源码仓库。预发布不得覆盖稳定版或设为 Latest。发布后校验标签、源码版本、资产校验和一致，再更新本地 `main`。不重新移动已经发布的标签。
 

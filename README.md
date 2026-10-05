@@ -109,4 +109,4 @@ AutoLogin_SIAS_Installer.exe
 
 账号密码保存在本机 `.env` 文件中；门户使用 HTTP 和 RC4 兼容协议。仅使用你有权使用的账号，勿分享配置文件，详见 [安全说明](docs/USAGE.md#账号与配置安全)。
 
-[更新日志](CHANGELOG.md) · [源码构建与发布](docs/DEVELOPMENT.md#构建与发布) · [v1.1 历史教程](https://github.com/LeeAstra/autologin-sias/blob/v1.1.0/README.md) · [MIT 许可证](LICENSE)
+[代码结构与跨平台开发](docs/ARCHITECTURE.md) · [更新日志](CHANGELOG.md) · [源码构建与发布](docs/DEVELOPMENT.md#构建与发布) · [v1.1 历史教程](https://github.com/LeeAstra/autologin-sias/blob/v1.1.0/README.md) · [MIT 许可证](LICENSE)

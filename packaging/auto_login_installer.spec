@@ -8,7 +8,7 @@ if not payload.is_file():
 a = Analysis([str(root.parent / 'src' / 'install_autologin.py')],
              pathex=[], binaries=[],
              datas=[(str(payload), 'payload'),
-                    (str(root.parent / 'scripts' / 'Install-AutoLoginTask.ps1'), 'payload')],
+                    (str(root.parent / 'scripts' / 'windows' / 'Install-AutoLoginTask.ps1'), 'payload')],
              hiddenimports=[], hookspath=[], hooksconfig={}, runtime_hooks=[],
              # The deployment wizard performs no TLS or cryptographic operations.
              # Leave the embedded headless program's TLS dependencies intact.

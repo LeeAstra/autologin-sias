@@ -1,0 +1,1 @@
+"""Portable authentication business logic."""

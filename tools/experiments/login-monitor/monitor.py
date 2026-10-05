@@ -2,14 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
 from datetime import datetime, timedelta
 import json
 import logging
 import os
 from pathlib import Path
-import re
-import subprocess
 import sys
 import time
 from urllib.parse import urlparse
@@ -19,6 +16,8 @@ from http.cookiejar import CookieJar
 if not getattr(sys, 'frozen', False):
     root = Path(__file__).resolve().parents[3]
     sys.path[:0] = [str(root / 'src'), str(Path(__file__).resolve().parents[1] / 'login-diagnostics')]
+from sias_autologin.platforms.windows.network import target_wifi
+from sias_autologin.platforms.windows.session import WindowsSession
 import record_login as diag
 login = diag.login
 
@@ -92,19 +91,6 @@ def query_info():
     return observation
 
 
-def target_wifi(ssid):
-    try:
-        result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], capture_output=True,
-                                timeout=5, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        # SSIDs are Unicode on Windows; netsh console encoding follows the OEM code page.
-        encoding = f'cp{ctypes.windll.kernel32.GetOEMCP()}' if os.name == 'nt' else 'utf-8'
-        text = result.stdout.decode(encoding, errors='replace')
-        if result.returncode != 0:
-            return 'network_unverified'
-        names = re.findall(r'^\s*SSID\s*:\s*(.*?)\s*$', text, re.M)
-        return 'target_network' if ssid in names else 'wrong_network'
-    except Exception:
-        return 'network_unverified'
 
 
 class Tracker:
@@ -152,27 +138,6 @@ def summary(output):
         print(f'  {day}: {count}')
 
 
-class WindowsSession:
-    def __enter__(self):
-        if os.name != 'nt':
-            raise RuntimeError('This monitor requires Windows.')
-        self.kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-        self.kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
-        self.kernel.CreateMutexW.restype = ctypes.c_void_p
-        self.kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-        self.handle = self.kernel.CreateMutexW(None, False, 'Local\\SIAS_NightMonitor')
-        error = ctypes.get_last_error()
-        if not self.handle:
-            raise ctypes.WinError(error)
-        if error == 183:
-            self.kernel.CloseHandle(self.handle)
-            raise RuntimeError('Another SIAS monitor is running. Stop it first.')
-        self.kernel.SetThreadExecutionState(0x80000001)
-        return self
-
-    def __exit__(self, *args):
-        self.kernel.SetThreadExecutionState(0x80000000)
-        self.kernel.CloseHandle(self.handle)
 
 
 def record_login(output, cleaner, event):

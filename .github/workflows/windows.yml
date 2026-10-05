@@ -7,6 +7,16 @@ on:
 permissions:
   contents: read
 jobs:
+  portable-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python -m unittest discover -s tests -p 'test_portable_core.py' -v
+      - run: python -m unittest discover -s tests -p 'test_login.py' -v
+      - run: python -m unittest discover -s tests -p 'test_credentials.py' -v
   test-and-build:
     runs-on: windows-latest
     steps:

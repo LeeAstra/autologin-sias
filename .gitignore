@@ -25,6 +25,8 @@ venv_clean/
 
 # PyInstaller/build output
 build/
+!scripts/build/
+!scripts/build/*.ps1
 build_*/
 dist/
 dist_*/

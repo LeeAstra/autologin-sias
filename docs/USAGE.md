@@ -25,6 +25,14 @@
 
 日志包含 `Background login request completed successfully` 表示本次请求通过程序的成功判断；还应通过浏览网页确认实际联网。
 
+### v1.3.0-rc.1 候选版：先检测再登录
+
+v1.3.0-rc.1每次运行先查询门户资料接口。确认已认证时记录 `already_authenticated`、`action=skip` 并返回 0；需认证时执行原认证流程。检测超时、解析异常或结构未知时记录 `prior_state=unknown`，仍尝试原认证，避免临时查询失败阻断恢复。
+
+登录响应成功后必须再次查询到 `post_state=authenticated` 才返回 0；仍需认证或无法确认时返回现有退出码 8。最终 `Authentication summary` 记录 `prior_state`、`action`、`login_response_result`、`post_state`、`confirmed`、`exit_code` 和 `duration`。跳过时没有提交登录请求，因此响应与后查询字段为空或 `not_checked`，`confirmed=True` 来自前查询。
+
+这里确认的是门户认证状态，不代表外网一定可用。程序不查询外网，不记录资料正文或凭据。已在线跳过也不代表此次验证了配置中的账号密码，首次配置或更换账号时要在未认证状态下验证。原 Wi-Fi 事件、每日时间、任务电源条件、CLI 与一次运行后退出的方式均保留；独立 `tools/experiments/login-monitor` 循环版继续用于夜间实验。
+
 ## 安装位置与磁盘占用
 
 v1.2.0 的 `AutoLogin_SIAS_Installer.exe` 固定安装到 `%LOCALAPPDATA%\AutoLogin_SIAS`，通常对应 **`C:\Users\你的用户名\AppData\Local\AutoLogin_SIAS`**。若系统迁移过用户目录，则以 `%LOCALAPPDATA%` 的实际位置为准，并非硬编码为 C 盘。

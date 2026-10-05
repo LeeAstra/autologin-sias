@@ -6,6 +6,10 @@
 
 **[下载一键安装包](https://github.com/LeeAstra/autologin-sias/releases/download/v1.2.0/AutoLogin_SIAS_Installer.exe)** · [版本说明](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0) · [使用与排障](docs/USAGE.md)
 
+**候选版 v1.3.0-rc.1：**先检测门户状态，已认证就跳过登录，登录后确认恢复并记录状态。[候选版说明](docs/releases/v1.3.0-rc.1.md) · [预发布下载](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0-rc.1)。新版仍待正式校园网实测，普通用户可继续使用上面的 v1.2.0 稳定版。当前源码版本为 v1.3.0-rc.1。
+
+夜间连续实验的源码、测试和构建说明独立放在 [tools/experiments](tools/experiments/README.md)，不会随安装包部署，也不会修改计划任务。
+
 ## 第一次使用，按这 4 步操作
 
 ### 1. 连接校园网，准备账号

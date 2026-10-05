@@ -33,6 +33,7 @@ class InstallTests(unittest.TestCase):
         with patch.dict(os.environ, {'WLAN_PWD': 'stale', 'SystemRoot': 'C:\\Windows'}):
             installer.install(self.payload, self.target, 'user', 'secret', run)
         self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][0][1], '--validate-credentials')
         self.assertNotIn('WLAN_PWD', calls[0][1]['env'])
         self.assertNotIn('secret', str(calls))
         self.assertEqual(load_env_file(self.target / '.env'), {'WLAN_USER': 'user', 'WLAN_PWD': 'secret'})

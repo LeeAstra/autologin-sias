@@ -29,7 +29,11 @@ def origin(url):
 
 
 def route(url):
-    if origin(url) != origin(login.PORTAL_ORIGIN):
+    try:
+        same_origin = origin(url) == origin(login.PORTAL_ORIGIN)
+    except ValueError:
+        return 'unknown'
+    if not same_origin:
         return 'unknown'
     path = urlparse(url).path
     if path == '/homepage/index.html':
@@ -42,15 +46,7 @@ def route(url):
 
 
 def info_state(status, payload):
-    if status != 200 or not isinstance(payload, dict):
-        return 'unknown'
-    data = payload.get('data')
-    if payload.get('success') is True and isinstance(data, dict) and isinstance(data.get('basic'), dict):
-        return 'authenticated'
-    location = payload.get('location')
-    if payload.get('success') is False and isinstance(location, str) and route(location) == 'auth_required':
-        return 'auth_required'
-    return 'unknown'
+    return login.authentication_state(status, json.dumps(payload).encode("utf-8"))[0]
 
 
 def root_state(result):

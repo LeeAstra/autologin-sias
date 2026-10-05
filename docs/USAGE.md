@@ -31,7 +31,7 @@ v1.3.0-rc.1每次运行先查询门户资料接口。确认已认证时记录 `a
 
 登录响应成功后必须再次查询到 `post_state=authenticated` 才返回 0；仍需认证或无法确认时返回现有退出码 8。最终 `Authentication summary` 记录 `prior_state`、`action`、`login_response_result`、`post_state`、`confirmed`、`exit_code` 和 `duration`。跳过时没有提交登录请求，因此响应与后查询字段为空或 `not_checked`，`confirmed=True` 来自前查询。
 
-这里确认的是门户认证状态，不代表外网一定可用。程序不查询外网，不记录资料正文或凭据。已在线跳过也不代表此次验证了配置中的账号密码，首次配置或更换账号时要在未认证状态下验证。原 Wi-Fi 事件、每日时间、任务电源条件、CLI 与一次运行后退出的方式均保留；独立 `tools/experiments/login-monitor` 循环版继续用于夜间实验。
+这里确认的是门户认证状态，不代表外网一定可用。程序不查询外网，不记录资料正文或凭据。日常已在线跳过不代表验证了配置中的账号密码。后续源码修复使用独立 `--validate-credentials` 模式供安装器和首次配置验证：即使已在线也提交新凭据，明确拒绝时返回 5 并由安装器回滚；默认执行和 `--check` 仍保持已在线跳过。此修复尚未包含在已发布的 v1.3.0-rc.1 资产中。原 Wi-Fi 事件、每日时间、任务电源条件、CLI 与一次运行后退出的方式均保留；独立 `tools/experiments/login-monitor` 循环版继续用于夜间实验。
 
 ## 安装位置与磁盘占用
 

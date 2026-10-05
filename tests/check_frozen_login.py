@@ -71,6 +71,7 @@ try:
         for label, body, status, expected in [
             ('success', b'{"success":true}', 200, 0),
             ('rejected', b'{"success":false}', 200, 5),
+            ('javascript-rejected', b"{'success':false,'msg':'denied'}", 200, 5),
             ('boolean-result-rejected', b'{"result":false}', 200, 5),
             ('unrecognized-html', b'<html>portal</html>', 200, 8),
             ('empty-response', b'', 200, 8),
@@ -128,13 +129,14 @@ try:
         assert len(task_calls) == 1
         assert (target / exe_source.name).read_bytes() == exe_source.read_bytes()
         old_config = (target / '.env').read_bytes()
-        response.update(body=b'{"success":false}')
+        response.update(body=b"{'success':false,'msg':'denied'}", prior='authenticated', post='authenticated')
         requests.clear()
         try:
             install_autologin.install(fixture_payload, target, 'other-user', 'other-password', run_child)
             raise AssertionError('Rejected authentication accepted by installer')
         except RuntimeError:
             pass
+        assert any(r[1].endswith('/ac_portal/login.php') for r in requests), 'Online credential validation skipped'
         assert (target / '.env').read_bytes() == old_config
         assert len(task_calls) == 1, 'Task registration reached after failed authentication'
         print('Deployment with real child EXE: success and failed-upgrade rollback OK')

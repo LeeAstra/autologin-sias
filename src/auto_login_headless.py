@@ -13,6 +13,7 @@ import getpass
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import re
 from pathlib import Path
 import socket
 import sys
@@ -134,7 +135,7 @@ def setup_env() -> int:
     global ENV_PATH
     ENV_PATH = target
     print("配置已保存，正在测试后台登录……")
-    result = run_login()
+    result = run_login(validate_credentials=True)
     if result == 0:
         print("配置测试成功。之后可将无窗口 EXE 加入定时任务。")
     else:
@@ -146,6 +147,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SIAS campus network background login")
     parser.add_argument("--setup", action="store_true", help="运行首次配置向导")
     parser.add_argument("--check", action="store_true", help="读取现有配置并测试登录")
+    parser.add_argument("--validate-credentials", action="store_true", help="提交并验证配置凭据，即使当前已认证")
     parser.add_argument("--version", action="store_true", help="显示版本")
     return parser.parse_args()
 
@@ -211,10 +213,24 @@ def response_indicates_success(body: bytes) -> tuple[bool | None, str]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
+        # The portal uses a JavaScript object with single quotes. Parse its
+        # top-level boolean field before inspecting message text; never eval it.
+        tokens = re.findall(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[{}\[\]:,]|[A-Za-z_][A-Za-z_0-9]*", text)
+        depth = 0
+        for index, token in enumerate(tokens):
+            if token in ("{", "["):
+                depth += 1
+            elif token in ("}", "]"):
+                depth -= 1
+            elif (depth == 1 and token.strip("\"'").lower() == "success"
+                  and index > 0 and tokens[index - 1] in ("{", ",")
+                  and tokens[index + 1:index + 2] == [":"]
+                  and tokens[index + 2:index + 3] in (["true"], ["false"])):
+                return tokens[index + 2] == "true", "portal success boolean field"
         lowered = text.lower()
         if any(word in lowered for word in ("error", "fail", "invalid", "wrong", "密码错误")):
             return False, "failure marker in response"
-        if any(word in lowered for word in ("success", "login ok", "登录成功")):
+        if any(word in lowered for word in ("logon success", "login ok", "登录成功")):
             return True, "success marker in response"
         return None, f"unrecognized response ({len(body)} bytes)"
 
@@ -285,14 +301,14 @@ def query_authentication_state() -> tuple[str, str]:
         return "unknown", type(exc).__name__
 
 
-def run_login() -> int:
+def run_login(*, validate_credentials: bool = False) -> int:
     started = time.monotonic()
     outcome = {"prior_state": "not_checked", "action": "none",
                "login_response_result": None, "post_state": "not_checked",
                "confirmed": False}
     code = 9
     try:
-        code = _run_login_once(outcome)
+        code = _run_login_once(outcome, validate_credentials=validate_credentials)
         return code
     except Exception as exc:
         LOGGER.error("Unexpected error: %s", type(exc).__name__)
@@ -306,7 +322,7 @@ def run_login() -> int:
         )
 
 
-def _run_login_once(outcome: dict) -> int:
+def _run_login_once(outcome: dict, *, validate_credentials: bool = False) -> int:
     config = load_env_file(ENV_PATH)
     username = os.getenv("WLAN_USER") or config.get("WLAN_USER", "")
     password = os.getenv("WLAN_PWD") or config.get("WLAN_PWD", "")
@@ -318,11 +334,12 @@ def _run_login_once(outcome: dict) -> int:
     prior_state, prior_reason = query_authentication_state()
     outcome["prior_state"] = prior_state
     LOGGER.info("Authentication before login: prior_state=%s reason=%s", prior_state, prior_reason)
-    if prior_state == "authenticated":
+    if prior_state == "authenticated" and not validate_credentials:
         outcome.update(action="skip", confirmed=True)
         LOGGER.info("already_authenticated: skipping login; portal authentication confirmed")
         return 0
     outcome["action"] = "login"
+    LOGGER.info("Credential validation requested: %s", validate_credentials)
 
     auth_tag = str(int(time.time() * 1000))
     encrypted_password = rc4_hex(password, auth_tag)
@@ -411,4 +428,4 @@ if __name__ == "__main__":
                 pass
         sys.exit(setup_result)
     # --check and the no-argument scheduled mode both execute one login check.
-    sys.exit(run_login())
+    sys.exit(run_login(validate_credentials=arguments.validate_credentials))

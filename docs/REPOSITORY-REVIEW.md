@@ -19,3 +19,11 @@
 GitHub Flow 推荐合并后删除功能分支，删除分支不会删除 PR 或提交历史：[GitHub Flow](https://docs.github.com/en/get-started/using-github/github-flow)。主分支可用状态检查和强推限制保护：[Protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)。版本规则参考 [Semantic Versioning](https://semver.org/)。
 
 以上是流程检查，不代表完整历史敏感信息审计。当前上传只选择源码和合成测试，不上传个人记录。
+
+## 后续落实（2026-10-05）
+
+经用户授权，已创建并启用 Protect main 规则集：仅覆盖 main，要求 PR、GitHub Actions 的 test-and-build 成功且分支保持最新，要求解决讨论，禁止删除及强推。审批数为 0，不要求作者自审；未配置绕过人员。
+
+已开启合并后自动删除功能分支。逐一核对 PR 已合并且最终 head SHA 与远端分支一致后，清理四个历史功能分支；PR、提交历史及 Release 标签保留。本地历史分支暂时保留，远端追踪引用通过 fetch --prune 更新。
+
+通过独立维护 PR 更新 setup-python 和 upload-artifact 到官方 v7，消除旧 Node.js 运行时提示。未改认证程序、版本标签、安装包、任务条件或实验记录。此前表格记录的是检查时状态，以上为随后实施结果。

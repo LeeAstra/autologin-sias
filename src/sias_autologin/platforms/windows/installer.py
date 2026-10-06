@@ -1,6 +1,7 @@
 """Single-file Windows deployment wizard; payloads are bundled by PyInstaller."""
 from pathlib import Path
 import getpass
+import ctypes
 import os
 import shutil
 import subprocess
@@ -8,7 +9,7 @@ import sys
 import tempfile
 import time
 from ...version import VERSION
-from ...config import write_env_file
+from ...config import write_env_file, load_env_file, find_env_path
 
 
 def payload_dir():
@@ -24,7 +25,20 @@ def replace_file(path, writer):
         writer(staged)
         for attempt in range(20):
             try:
-                os.replace(staged, path)
+                try:
+                    os.replace(staged, path)
+                except OSError as exc:
+                    if os.name != 'nt' or getattr(exc, 'winerror', None) != 17:
+                        raise
+                    # EFS can reject a same-directory rename as cross-device.
+                    # Permit Windows' copy/move fallback only for this staged pair.
+                    if staged.parent.resolve() != path.parent.resolve():
+                        raise
+                    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                    kernel.MoveFileExW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+                    kernel.MoveFileExW.restype = ctypes.c_bool
+                    if not kernel.MoveFileExW(str(staged), str(path), 0x1 | 0x2 | 0x8):
+                        raise ctypes.WinError(ctypes.get_last_error())
                 return
             except PermissionError:
                 if attempt == 19:
@@ -34,10 +48,30 @@ def replace_file(path, writer):
         staged.unlink(missing_ok=True)
 
 
-def install(payload, target, username, password, runner=subprocess.run):
+def install(payload, target, username, password, runner=subprocess.run, *, mode=None, old_target=None):
     if not username or not password or any(c in username + password for c in '\r\n'):
         raise ValueError('账号和密码不能为空或包含换行。')
+    if mode not in (None, 'continuous', 'night'):
+        raise ValueError('Unsupported maintenance mode')
+    target = Path(target).resolve()
+    old_target = Path(old_target).resolve() if old_target else None
     target.mkdir(parents=True, exist_ok=True)
+    old_snapshot = {}
+    if old_target and old_target != target:
+        for name in ('AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env'):
+            source = old_target / name
+            if source.is_file():
+                old_snapshot[name] = source.read_bytes()
+    if mode:
+        backup = Path(os.environ['LOCALAPPDATA']) / 'AutoLogin_SIAS_Backups' / (time.strftime('%Y%m%d-%H%M%S') + '-' + str(time.time_ns()))
+        backup.mkdir(parents=True, exist_ok=False)
+        for name, content in old_snapshot.items():
+            (backup / name).write_bytes(content)
+        for name in ('AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env'):
+            source = target / name
+            if source.is_file():
+                (backup / ('target-' + name)).write_bytes(source.read_bytes())
+        print(f'文件备份：{backup}')
     exe = target / 'AutoLogin_SIAS_Headless.exe'
     script = target / 'Install-AutoLoginTask.ps1'
     config = target / '.env'
@@ -48,13 +82,15 @@ def install(payload, target, username, password, runner=subprocess.run):
     child_env = dict(os.environ)
     child_env.pop('WLAN_USER', None)
     child_env.pop('WLAN_PWD', None)
+    if mode:
+        control_task('stop', runner)
     try:
         for path in (exe, script):
             if previous[path] != (payload / path.name).read_bytes():
-                replace_file(path, lambda staged: shutil.copy2(payload / path.name, staged))
                 changed.append(path)
-        replace_file(config, lambda staged: write_env_file(staged, username, password))
+                replace_file(path, lambda staged: shutil.copy2(payload / path.name, staged))
         changed.append(config)
+        replace_file(config, lambda staged: write_env_file(staged, username, password))
         result = runner([str(exe), '--validate-credentials'], cwd=str(target), env=child_env, timeout=90)
         if result.returncode:
             raise RuntimeError(f'登录验证失败（退出码 {result.returncode}），请检查校园网连接、账号及日志。')
@@ -65,15 +101,55 @@ def install(payload, target, username, password, runner=subprocess.run):
                 path.unlink(missing_ok=True)
             else:
                 replace_file(path, lambda staged: staged.write_bytes(content))
+        if mode:
+            control_task('start', runner, required=False)
         raise
     # Once registration begins, retain installed files even on failure: a task
     # may already reference them. The task script backs up the previous XML.
     powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
     result = runner([str(powershell), '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
-                     'Bypass', '-File', str(script), '-ExePath', str(exe)],
+                     'Bypass', '-File', str(script), '-ExePath', str(exe)] + (['-Mode', mode] if mode else []),
                     cwd=str(target), timeout=120)
     if result.returncode:
         raise RuntimeError('登录已验证，但自动任务安装失败。文件已保留，请根据上方错误处理后重新运行安装程序。')
+
+    if mode:
+        control_task('start', runner)
+        # Do not remove the source until task registration succeeded, and never
+        # touch other files or remove the directory itself.
+        for name, content in old_snapshot.items():
+            source = old_target / name
+            if source.is_file() and source.read_bytes() == content:
+                try:
+                    source.unlink()
+                except OSError:
+                    print(f'旧文件暂未清理，可稍后手动处理：{source}')
+
+
+def powershell_path():
+    return str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe')
+
+
+def control_task(action, runner=subprocess.run, *, required=True):
+    command = "$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { "
+    command += ("Disable-ScheduledTask -InputObject $task | Out-Null; Stop-ScheduledTask -InputObject $task; $deadline=(Get-Date).AddSeconds(15); while ((Get-ScheduledTask -TaskPath '\\' -TaskName 'AutoLogin_SIAS').State -eq 'Running') { if ((Get-Date) -gt $deadline) { throw 'Task did not stop' }; Start-Sleep -Milliseconds 200 }" if action == 'stop' else "Enable-ScheduledTask -InputObject $task | Out-Null; Start-ScheduledTask -InputObject $task") + ' }'
+    result = runner([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], timeout=30)
+    if result.returncode and required:
+        raise RuntimeError('无法停止或启动已有任务，请检查权限和任务状态。')
+
+
+def existing_directory():
+    command = "$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { if (@($task.Actions).Count -ne 1) { throw 'Unsupported task actions' }; $id=$task.Principal.UserId; if ($id -notlike 'S-1-*') { $id=([Security.Principal.NTAccount]::new($id)).Translate([Security.Principal.SecurityIdentifier]).Value }; if ($id -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'Task belongs to another account' }; $task.Actions.Execute }"
+    result = subprocess.run([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], capture_output=True, text=True, timeout=30)
+    if result.returncode:
+        raise RuntimeError('无法读取旧任务，请使用同一 Windows 账户的管理员权限运行。')
+    value = result.stdout.strip().strip('"')
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute() or path.name.lower() != 'autologin_sias_headless.exe':
+        raise RuntimeError('已有任务不是可识别的自动登录程序，请先人工检查。')
+    return path.resolve().parent
 
 
 def main():
@@ -91,16 +167,31 @@ def main():
         raise ValueError('不支持的参数。')
     print(f'AutoLogin SIAS {VERSION} 一键部署\n请连接 UESTC 校园网后继续。')
     print('请使用自己的 Windows 管理员账户；不要使用其他账户的凭据提权。')
-    target = Path(os.environ['LOCALAPPDATA']) / 'AutoLogin_SIAS'
-    print(f'安装目录：{target}')
-    print('将安装后台程序，验证登录，并创建或更新 Wi-Fi / 每日自动任务。')
-    if (target / '.env').exists():
-        print('检测到已有安装，本次输入的账号密码将替换原配置。')
-    username = input('校园网账号：').strip()
-    password = getpass.getpass('校园网密码（不显示）：')
-    install(payload_dir(), target, username, password)
-    print('部署完成！后台认证和自动任务已就绪。可删除下载的安装包。')
-    print('已有任务的时间计划会保留；新任务默认每天 04:10 运行。')
+    old_target = existing_directory()
+    default_target = Path(os.environ['LOCALAPPDATA']) / 'AutoLogin_SIAS'
+    location = input(f'安装目录（回车使用 {default_target}）：').strip().strip('"')
+    target = Path(location).expanduser() if location else default_target
+    if not target.is_absolute():
+        raise ValueError('请选择绝对安装路径。')
+    print('① UESTC 持续维护：每30秒检测，断开后退出')
+    print('② 夜间时段维护：02:55～03:15，每5秒检测')
+    choice = input('选择模式 [1/2，默认2]：').strip() or '2'
+    if choice not in ('1','2'):
+        raise ValueError('模式只能选择1或2。')
+    mode = 'continuous' if choice == '1' else 'night'
+    config_dir = target if (target / '.env').is_file() else old_target
+    config_path = find_env_path(config_dir) if config_dir else None
+    config = load_env_file(config_path) if config_path else {}
+    reuse = bool(config.get('WLAN_USER') and config.get('WLAN_PWD')) and input('检测到旧配置，保留账号密码？[Y/n]：').strip().lower() != 'n'
+    username = config['WLAN_USER'] if reuse else input('校园网账号：').strip()
+    password = config['WLAN_PWD'] if reuse else getpass.getpass('校园网密码（不显示）：')
+    print(f'将安装至 {target}，更新 AutoLogin_SIAS 任务为 {mode} 模式。')
+    print('旧程序和配置先备份；迁移成功后清理旧目录中的三个已识别文件，其他文件保留。')
+    if input('确认安装？[Y/n]：').strip().lower() == 'n':
+        return
+    install(payload_dir(), target, username, password, mode=mode, old_target=old_target)
+    print('部署完成。任务已更新并启动；夜间模式在时段外会直接退出。')
+
 
 
 def entrypoint():

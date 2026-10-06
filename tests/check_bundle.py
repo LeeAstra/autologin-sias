@@ -1,5 +1,6 @@
 """Read-only artifact checks and frozen CLI smoke tests; never install a task."""
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 import subprocess
 import tempfile
@@ -27,3 +28,11 @@ with tempfile.TemporaryDirectory() as directory:
                             cwd=directory, timeout=60)
     assert result.returncode == 0
 print(f'Bundle verified: {bundle.stat().st_size:,} bytes')
+
+# Outside-window maintenance smoke test: no network or authentication is run.
+start = (datetime.now() + timedelta(hours=2)).strftime('%H:%M')
+end = (datetime.now() + timedelta(hours=2, minutes=1)).strftime('%H:%M')
+result = subprocess.run([str(dist / 'AutoLogin_SIAS_Headless.exe'), '--maintain', 'night',
+                         '--window-start', start, '--window-end', end], timeout=60)
+assert result.returncode == 0, 'Frozen maintenance entry failed'
+print('Frozen maintenance outside-window exit verified')

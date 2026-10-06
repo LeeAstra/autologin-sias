@@ -33,6 +33,21 @@ try {
     $failed = $false
     try { & $installer -ExePath $exe -DailyAt '06:00' -ExportOnly $preview } catch { $failed = $true }
     Assert $failed 'Existing schedule must reject DailyAt override.'
+    & $installer -ExePath $exe -Mode night -ExportOnly $preview
+    [xml]$night = Get-Content -LiteralPath $preview -Raw
+    Assert ($night.Task.Actions.Exec.Arguments -eq '--maintain night') 'Night mode arguments missing.'
+    Assert (($night.Task.Actions.Exec.ChildNodes.LocalName -join ',') -eq 'Command,Arguments,WorkingDirectory') 'Exec XML element order violates task schema.'
+    Assert ($night.Task.Triggers.CalendarTrigger.StartBoundary -like '*T02:55:00') 'Night time incorrect.'
+    Assert ($night.Task.Settings.ExecutionTimeLimit -eq 'PT30M') 'Night execution limit incorrect.'
+    Assert ($night.Task.Settings.WakeToRun -eq 'true') 'Power setting not preserved.'
+    $global:AutoLoginTestExistingXml = $night.OuterXml
+    & $installer -ExePath $exe -Mode continuous -ExportOnly $preview
+    [xml]$continuous = Get-Content -LiteralPath $preview -Raw
+    Assert ($continuous.Task.Actions.Exec.Arguments -eq '--maintain continuous') 'Continuous arguments missing.'
+    Assert (-not $continuous.Task.Triggers.CalendarTrigger) 'Old daily trigger retained.'
+    Assert ($continuous.Task.Settings.ExecutionTimeLimit -eq 'PT0S') 'Continuous execution limit incorrect.'
+    Assert ([bool]$continuous.Task.Triggers.LogonTrigger) 'Logon fallback missing.'
+    Assert ([bool]$continuous.Task.Triggers.BootTrigger) 'Boot fallback missing.'
     Write-Output 'Task XML preview tests passed (no tasks registered).'
 } finally {
     # Only remove the unique, verified fixture directory created above.

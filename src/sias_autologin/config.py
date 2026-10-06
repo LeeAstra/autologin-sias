@@ -37,3 +37,8 @@ def write_env_file(path: Path, username: str, password: str) -> None:
         path.chmod(0o600)
     except OSError:
         pass
+
+
+def find_env_path(base_dir):
+    candidates = [base_dir / ".env", base_dir.parent / ".env", Path.cwd() / ".env"]
+    return next((path for path in candidates if path.is_file()), candidates[0])

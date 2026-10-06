@@ -4,7 +4,7 @@
 
 ## 修改与验证
 
-分层设计与跨平台开发入口见 [代码结构](docs/ARCHITECTURE.md)。正式认证程序在 `src/`，安装与任务脚本在 `scripts/`，实验工具在 `tools/experiments/`。实验代码不纳入安装包。改动任务条件或认证协议时，必须在 PR 中明确说明；普通状态检测调整不应顺带改变触发时间或电源设置。
+分层设计与跨平台开发入口见 [代码结构](docs/ARCHITECTURE.md)。认证核心在 `src/sias_autologin/core/`，可跨平台循环在 `runtime/`，Windows 适配在 `platforms/windows/`。正式认证程序在 `src/`，安装与任务脚本在 `scripts/`，实验工具在 `tools/experiments/`。实验代码不纳入安装包。改动任务条件或认证协议时，必须在 PR 中明确说明；普通状态检测调整不应顺带改变触发时间或电源设置。
 
 安装构建依赖后，在 Windows / Python 3.13 运行：
 

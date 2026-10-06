@@ -12,9 +12,7 @@ def application_dir():
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[1]
 
-def find_env_path(base_dir):
-    candidates = [base_dir / ".env", base_dir.parent / ".env", Path.cwd() / ".env"]
-    return next((path for path in candidates if path.is_file()), candidates[0])
+from .config import find_env_path
 
 def configure_logging(log_path, app_name="AutoLogin_SIAS_Headless") -> logging.Logger:
     logger = logging.getLogger(app_name)
@@ -94,7 +92,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--check", action="store_true", help="读取现有配置并测试登录")
     parser.add_argument("--validate-credentials", action="store_true", help="提交并验证配置凭据，即使当前已认证")
     parser.add_argument("--version", action="store_true", help="显示版本")
-    return parser.parse_args()
+    parser.add_argument('--maintain', choices=('continuous', 'night'), help='Windows maintenance mode')
+    parser.add_argument('--window-start', default='02:55')
+    parser.add_argument('--window-end', default='03:15')
+    args = parser.parse_args()
+    from datetime import time
+    try:
+        start, end = time.fromisoformat(args.window_start), time.fromisoformat(args.window_end)
+        if start == end or start.tzinfo or end.tzinfo:
+            raise ValueError()
+    except ValueError:
+        parser.error('Window times must be distinct local HH:MM values')
+    if args.maintain and (args.setup or args.check or args.validate_credentials):
+        parser.error('Maintenance cannot be combined with setup or credential checks')
+    return args
 
 
 def main(app=None):
@@ -118,5 +129,8 @@ def main(app=None):
             except EOFError:
                 pass
         return setup_result
+    if arguments.maintain:
+        from .platforms.windows.runner import run
+        return run(app, arguments)
     # --check and the no-argument scheduled mode both execute one login check.
     return app.run_login(validate_credentials=arguments.validate_credentials)

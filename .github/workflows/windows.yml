@@ -15,6 +15,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m unittest discover -s tests -p 'test_portable_core.py' -v
+      - run: python -m unittest discover -s tests -p 'test_maintenance.py' -v
       - run: python -m unittest discover -s tests -p 'test_login.py' -v
       - run: python -m unittest discover -s tests -p 'test_credentials.py' -v
   test-and-build:

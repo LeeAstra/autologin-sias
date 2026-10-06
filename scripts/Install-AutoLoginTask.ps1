@@ -6,6 +6,7 @@ param(
     [ValidateNotNullOrEmpty()] [string]$SSID = 'UESTC',
     [ValidatePattern('^[^\\/]+$')] [string]$TaskName = 'AutoLogin_SIAS',
     [ValidatePattern('^([01][0-9]|2[0-3]):[0-5][0-9]$')] [string]$DailyAt = '04:10',
+    [ValidateSet('continuous','night')] [string]$Mode,
     [string]$ExportOnly
 )
 $ErrorActionPreference = 'Stop'

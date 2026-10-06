@@ -4,6 +4,8 @@ on:
     branches: [main, 'codex/**']
   pull_request:
   workflow_dispatch:
+env:
+  PYTHONUTF8: '1'
 permissions:
   contents: read
 jobs:
@@ -15,6 +17,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m unittest discover -s tests -p 'test_portable_core.py' -v
+      - run: python -m unittest discover -s tests -p 'test_maintenance.py' -v
       - run: python -m unittest discover -s tests -p 'test_login.py' -v
       - run: python -m unittest discover -s tests -p 'test_credentials.py' -v
   test-and-build:

@@ -6,6 +6,7 @@ param(
     [ValidateNotNullOrEmpty()] [string]$SSID = 'UESTC',
     [ValidatePattern('^[^\\/]+$')] [string]$TaskName = 'AutoLogin_SIAS',
     [ValidatePattern('^([01][0-9]|2[0-3]):[0-5][0-9]$')] [string]$DailyAt = '04:10',
+    [ValidateSet('continuous','night')] [string]$Mode,
     [string]$ExportOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -75,7 +76,7 @@ if (-not $existing) {
     Add-TextElement $schedule 'DaysInterval' '1'
     [void]$daily.AppendChild($schedule)
     [void]$triggers.AppendChild($daily)
-} elseif ($PSBoundParameters.ContainsKey('DailyAt')) {
+} elseif ($PSBoundParameters.ContainsKey('DailyAt') -and -not $Mode) {
     throw 'DailyAt applies only to new tasks. Existing time triggers are preserved; edit them in Task Scheduler.'
 }
 $instances = $xml.Task.Settings.SelectSingleNode('*[local-name()="MultipleInstancesPolicy"]')
@@ -85,7 +86,46 @@ $workingDirectory = $xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="Wor
 if ($workingDirectory) { $workingDirectory.InnerText = $exe.DirectoryName }
 else { Add-TextElement $xml.Task.Actions.Exec 'WorkingDirectory' $exe.DirectoryName }
 # An old action's arguments may invoke setup or other unintended modes.
-if ($xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="Arguments"]')) { throw 'Existing action has arguments; review them manually.' }
+$arguments = $xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="Arguments"]')
+if ($arguments -and (-not $Mode -or $arguments.InnerText -notin @('--maintain continuous','--maintain night'))) { throw 'Existing action has unrecognized arguments; review them manually.' }
+if ($Mode) {
+    $enabled = $xml.Task.Settings.SelectSingleNode('*[local-name()="Enabled"]')
+    if ($enabled) { $enabled.InnerText = 'true' }
+    # An explicit mode selection migrates this application's time/WLAN triggers.
+    foreach ($trigger in @($triggers.ChildNodes)) {
+        if ($trigger.LocalName -notin @('EventTrigger','CalendarTrigger','LogonTrigger','BootTrigger')) { throw 'Unexpected existing trigger; review manually.' }
+        if ($trigger.LocalName -eq 'EventTrigger' -and $trigger.Subscription -notlike "*$channel*") { throw 'Unrelated event trigger; review manually.' }
+        [void]$triggers.RemoveChild($trigger)
+    }
+    [void]$triggers.AppendChild($event)
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $logon = $xml.CreateElement('LogonTrigger', $namespace)
+    Add-TextElement $logon 'Enabled' 'true'
+    Add-TextElement $logon 'Delay' 'PT30S'
+    Add-TextElement $logon 'UserId' $identity
+    [void]$triggers.AppendChild($logon)
+    $boot = $xml.CreateElement('BootTrigger', $namespace)
+    Add-TextElement $boot 'Enabled' 'true'
+    Add-TextElement $boot 'Delay' 'PT30S'
+    [void]$triggers.AppendChild($boot)
+    if ($Mode -eq 'night') {
+        $daily = $xml.CreateElement('CalendarTrigger', $namespace)
+        Add-TextElement $daily 'StartBoundary' ((Get-Date -Format 'yyyy-MM-dd') + 'T02:55:00')
+        Add-TextElement $daily 'Enabled' 'true'
+        $schedule = $xml.CreateElement('ScheduleByDay', $namespace)
+        Add-TextElement $schedule 'DaysInterval' '1'
+        [void]$daily.AppendChild($schedule)
+        [void]$triggers.AppendChild($daily)
+    }
+    if (-not $arguments) {
+        $arguments = $xml.CreateElement('Arguments', $namespace)
+        $arguments.InnerText = "--maintain $Mode"
+        [void]$xml.Task.Actions.Exec.InsertBefore($arguments, $xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="WorkingDirectory"]'))
+    } else { $arguments.InnerText = "--maintain $Mode" }
+    $limit = $xml.Task.Settings.SelectSingleNode('*[local-name()="ExecutionTimeLimit"]')
+    $limitValue = if ($Mode -eq 'continuous') { 'PT0S' } else { 'PT30M' }
+    if ($limit) { $limit.InnerText = $limitValue } else { Add-TextElement $xml.Task.Settings 'ExecutionTimeLimit' $limitValue }
+}
 if ($ExportOnly) {
     $xml.Save($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ExportOnly))
     Write-Output "Preview saved: $ExportOnly (task not changed)"

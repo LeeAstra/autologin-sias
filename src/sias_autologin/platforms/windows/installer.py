@@ -49,6 +49,20 @@ def replace_file(path, writer):
         staged.unlink(missing_ok=True)
 
 
+def check_install_directory(target):
+    """S4U scheduled tasks cannot reliably read EFS-encrypted installations."""
+    if os.name != 'nt':
+        return
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetFileAttributesW.argtypes = [ctypes.c_wchar_p]
+    kernel.GetFileAttributesW.restype = ctypes.c_uint32
+    attributes = kernel.GetFileAttributesW(str(target))
+    if attributes == 0xFFFFFFFF:
+        raise ctypes.WinError(ctypes.get_last_error())
+    if attributes & 0x4000:
+        raise ValueError('安装目录启用了 EFS 加密，计划任务可能无法读取。请选择未加密的本地目录。')
+
+
 def install(payload, target, username, password, runner=subprocess.run, *, mode=None, old_target=None):
     if not username or not password or any(c in username + password for c in '\r\n'):
         raise ValueError('账号和密码不能为空或包含换行。')
@@ -57,6 +71,7 @@ def install(payload, target, username, password, runner=subprocess.run, *, mode=
     target = Path(target).resolve()
     old_target = Path(old_target).resolve() if old_target else None
     target.mkdir(parents=True, exist_ok=True)
+    check_install_directory(target)
     old_snapshot = {}
     if old_target and old_target != target:
         for name in ('AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env'):

@@ -73,6 +73,19 @@ class RecoveryTests(unittest.TestCase):
     def test_failed_fresh_install_removes_new_task(self):
         self.exercise('start', exists=False)
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows EFS installation check')
+    def test_encrypted_install_directory_is_rejected_before_task_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); payload=root/'payload'; payload.mkdir()
+            for name in ('AutoLogin_SIAS_Headless.exe','Install-AutoLoginTask.ps1'):
+                (payload/name).write_bytes(b'fixture')
+            with patch.object(installer.ctypes, 'WinDLL') as dll, patch.dict(os.environ,{'LOCALAPPDATA':folder}):
+                dll.return_value.GetFileAttributesW.return_value=0x4000
+                def forbidden(*args, **kwargs): raise AssertionError('Task must remain untouched')
+                with self.assertRaisesRegex(ValueError,'EFS'):
+                    installer.install(payload,root/'new','synthetic','synthetic',forbidden,mode='night')
+            self.assertEqual(list((root/'new').iterdir()),[])
+
     def test_snapshot_rejects_invalid_output(self):
         for output in ('', '{}', '{"exists":true}', '{"exists":"false"}'):
             with self.subTest(output=output), self.assertRaises(RuntimeError):

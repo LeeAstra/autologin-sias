@@ -26,6 +26,16 @@ login_times = []
 response = {'body': b'{"success":true}', 'status': 200, 'prior': 'auth_required', 'post': 'authenticated'}
 
 
+def configure_response(**overrides):
+    # Each scenario owns a complete fixture state; never inherit prior failures.
+    response.clear()
+    response.update(body=b'{"success":true}',status=200,prior='auth_required',
+                    post='authenticated',sequence=[])
+    response.update(overrides)
+    requests.clear()
+    login_times.clear()
+
+
 class PortalProxy(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -82,8 +92,7 @@ try:
             ('empty-response', b'', 200, 8),
             ('server-error', b'Unavailable', 503, 6),
         ]:
-            response.update(body=body, status=status)
-            requests.clear()
+            configure_response(body=body, status=status)
             result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
             assert result.returncode == expected, (label, result.returncode, expected)
             posts = [r for r in requests if r[1].endswith('/ac_portal/login.php')]
@@ -101,8 +110,7 @@ try:
                               (b'{"success":false,"message":"login successful"}',5),
                               (b'{"message":"login successful"}',0),
                               (b'{"message":"login successful but error"}',8)]:
-            response.update(body=body,status=200,prior='authenticated',post='authenticated')
-            requests.clear()
+            configure_response(body=body,status=200,prior='authenticated',post='authenticated')
             result=subprocess.run([str(exe),'--validate-credentials'],cwd=work,env=env,timeout=60)
             assert result.returncode==expected,(body,result.returncode,expected)
             assert any(r[1].endswith('/ac_portal/login.php') for r in requests)
@@ -110,18 +118,16 @@ try:
 
         for prior, post, expected in [('authenticated', 'unknown', 0), ('unknown', 'authenticated', 0),
                                       ('auth_required', 'auth_required', 8), ('auth_required', 'unknown', 8)]:
-            response.update(body=b'{"success":true}', status=200, prior=prior, post=post)
-            requests.clear()
+            configure_response(body=b'{"success":true}', status=200, prior=prior, post=post)
             result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
             assert result.returncode == expected, (prior, post, result.returncode)
             login_requests = [r for r in requests if r[1].endswith('/ac_portal/login.php')]
             assert bool(login_requests) == (prior != 'authenticated')
             print(f'Frozen EXE: prior={prior} post={post} -> {expected} OK')
 
-        response.update(body=b'{"success":true}', status=200, prior='auth_required', post='authenticated')
         for password in [' spaced-password ', '"quoted-password"', r'back\slash']:
+            configure_response()
             write_env_file(work / '.env', 'synthetic-user', password)
-            requests.clear()
             result = subprocess.run([str(exe), '--check'], cwd=work, env=env, timeout=60)
             assert result.returncode == 0
             form = parse_qs(next(r[2] for r in requests if r[1].endswith('/ac_portal/login.php')).decode())
@@ -142,8 +148,7 @@ try:
                         '--workpath',str(work/'build'),str(fixture_spec)],check=True,timeout=180)
         maintenance_exe=work/'WlanPolicyFixture.exe'
         for latest,submitted,confirmed in [('unknown',False,False),('authenticated',False,True),('auth_required',True,True)]:
-            response.update(body=b'{"success":true}',status=200,prior=latest,post='authenticated',sequence=['auth_required',latest])
-            requests.clear()
+            configure_response(body=b'{"success":true}',status=200,prior=latest,post='authenticated',sequence=['auth_required',latest])
             log=work/'auto_login_headless.log'
             log.unlink(missing_ok=True)
             begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
@@ -160,9 +165,9 @@ try:
         print('Test-only frozen maintenance harness: latest unknown/authenticated/required submission policy and per-run evidence OK')
 
         # Transient latest-state uncertainty must not consume credential cooldown.
-        response.update(body=b'{"success":true}',status=200,prior='authenticated',post='authenticated',
+        configure_response(body=b'{"success":true}',status=200,prior='authenticated',post='authenticated',
                         sequence=['auth_required','unknown','auth_required','auth_required'])
-        requests.clear();log.unlink(missing_ok=True)
+        log.unlink(missing_ok=True)
         begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
         end=(datetime.now()+timedelta(seconds=12)).strftime('%H:%M:%S')
         result=subprocess.run([str(maintenance_exe),'--maintain','night','--window-start',begin,
@@ -178,9 +183,9 @@ try:
         assert len([r for r in requests if r[1].endswith('/ac_portal/login.php')])==1
 
         # A real rejected submission still waits at least 15 seconds after completion.
-        response.update(body=b'{"success":false}',status=200,prior='auth_required',
+        configure_response(body=b'{"success":false}',status=200,prior='auth_required',
                         post='auth_required',sequence=[])
-        requests.clear();login_times.clear();log.unlink(missing_ok=True)
+        log.unlink(missing_ok=True)
         begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
         end=(datetime.now()+timedelta(seconds=23)).strftime('%H:%M:%S')
         result=subprocess.run([str(maintenance_exe),'--maintain','night','--window-start',begin,
@@ -211,14 +216,12 @@ try:
             kwargs['env'] = env
             return subprocess.run(args, **kwargs)
 
-        response.update(body=b'{"success":true}', status=200)
-        requests.clear()
+        configure_response(body=b'{"success":true}', status=200)
         install_autologin.install(fixture_payload, target, 'synthetic-user', 'synthetic-password', run_child)
         assert len(task_calls) == 1
         assert (target / exe_source.name).read_bytes() == exe_source.read_bytes()
         old_config = (target / '.env').read_bytes()
-        response.update(body=b"{'success':false,'msg':'denied'}", prior='authenticated', post='authenticated')
-        requests.clear()
+        configure_response(body=b"{'success':false,'msg':'denied'}", prior='authenticated', post='authenticated')
         try:
             install_autologin.install(fixture_payload, target, 'other-user', 'other-password', run_child)
             raise AssertionError('Rejected authentication accepted by installer')

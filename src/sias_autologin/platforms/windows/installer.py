@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 from ...version import VERSION
+from .install_lock import InstallationLock
 from ...config import write_env_file, load_env_file, find_env_path
 
 
@@ -64,6 +65,11 @@ def check_install_directory(target):
 
 
 def install(payload, target, username, password, runner=subprocess.run, *, mode=None, old_target=None):
+    with InstallationLock():
+        return _install(payload, target, username, password, runner, mode=mode, old_target=old_target)
+
+
+def _install(payload, target, username, password, runner=subprocess.run, *, mode=None, old_target=None):
     if not username or not password or any(c in username + password for c in '\r\n'):
         raise ValueError('账号和密码不能为空或包含换行。')
     if mode not in (None, 'continuous', 'night'):
@@ -222,6 +228,13 @@ def existing_directory():
 
 
 def main():
+    if sys.argv[1:] in (['--version'], ['--verify-payload']):
+        return _main()
+    with InstallationLock():
+        return _main()
+
+
+def _main():
     if sys.argv[1:] == ['--version']:
         print(f'AutoLogin SIAS Installer {VERSION}')
         return
@@ -264,6 +277,10 @@ def main():
 
 
 def entrypoint():
+    # Keep redirected wizard output readable on Chinese and English Windows.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     code = 0
     try:
         main()

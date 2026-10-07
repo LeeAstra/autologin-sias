@@ -20,6 +20,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_maintenance.py' -v
       - run: python -m unittest discover -s tests -p 'test_login.py' -v
       - run: python -m unittest discover -s tests -p 'test_credentials.py' -v
+      - run: python -m unittest discover -s tests -p 'test_review_regressions.py' -v
   test-and-build:
     runs-on: windows-latest
     steps:
@@ -34,8 +35,11 @@ jobs:
       - shell: powershell
         run: .\tests\Test-TaskPreview.ps1
       - shell: powershell
+        run: .\tests\Test-AcceptanceEvidence.ps1
+      - shell: powershell
         run: .\scripts\Build-Installer.ps1
       - run: python tests/check_task_recovery.py
+      - run: python tests/check_installer_lock.py
       - run: python tests/check_bundle.py
       - run: python tests/check_frozen_login.py
       - uses: actions/upload-artifact@v7

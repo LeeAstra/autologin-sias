@@ -7,7 +7,8 @@ from .portal import PortalClient
 from .authentication import rc4_hex, response_indicates_success
 
 def ensure_authenticated(username: str, password: str, *, client: PortalClient | None = None,
-                         logger: logging.Logger | None = None, validate_credentials: bool = False) -> int:
+                         logger: logging.Logger | None = None, validate_credentials: bool = False,
+                         require_auth_required: bool = False, before_auth=None, on_submit=None) -> int:
     client = client or PortalClient()
     logger = logger or logging.getLogger("AutoLogin_SIAS_Headless")
     started = time.monotonic()
@@ -16,7 +17,8 @@ def ensure_authenticated(username: str, password: str, *, client: PortalClient |
                "confirmed": False}
     code = 9
     try:
-        code = _run_login_once(username, password, client, logger, outcome, validate_credentials=validate_credentials)
+        code = _run_login_once(username, password, client, logger, outcome, validate_credentials=validate_credentials,
+                               require_auth_required=require_auth_required, before_auth=before_auth, on_submit=on_submit)
         return code
     except Exception as exc:
         logger.error("Unexpected error: %s", type(exc).__name__)
@@ -30,7 +32,8 @@ def ensure_authenticated(username: str, password: str, *, client: PortalClient |
         )
 
 
-def _run_login_once(username, password, client, logger, outcome: dict, *, validate_credentials: bool = False) -> int:
+def _run_login_once(username, password, client, logger, outcome: dict, *, validate_credentials=False,
+                    require_auth_required=False, before_auth=None, on_submit=None) -> int:
     if not username or not password:
         logger.error("Missing WLAN_USER or WLAN_PWD")
         return 2
@@ -42,6 +45,10 @@ def _run_login_once(username, password, client, logger, outcome: dict, *, valida
         outcome.update(action="skip", confirmed=True)
         logger.info("already_authenticated: skipping login; portal authentication confirmed")
         return 0
+    if require_auth_required and not validate_credentials and prior_state != "auth_required":
+        outcome["action"] = "wait"
+        logger.info("Maintenance policy: latest state is not auth_required; waiting")
+        return 8
     outcome["action"] = "login"
     logger.info("Credential validation requested: %s", validate_credentials)
 
@@ -50,9 +57,18 @@ def _run_login_once(username, password, client, logger, outcome: dict, *, valida
     opener = client.build_opener()
 
     try:
+        if before_auth is not None and not before_auth():
+            outcome["action"] = "wait"
+            return 8
         portal_status, _ = client.request(opener, client.settings.page)
         logger.info("Portal page status: %s", portal_status)
 
+        # The page fetch may cross the boundary; gate the credential POST too.
+        if before_auth is not None and not before_auth():
+            outcome["action"] = "wait"
+            return 8
+        if on_submit is not None:
+            on_submit()
         login_status, login_body = client.request(
             opener,
             client.settings.login_url,

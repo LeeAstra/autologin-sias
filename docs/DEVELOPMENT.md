@@ -1,8 +1,8 @@
 # 维护与验证
 
-当前源码与最新预发布为 **v1.3.0-rc.3**；稳定 Latest 仍为 **v1.2.0**。唯一版本来源是 `src/sias_autologin/version.py`。不同版本安装器和后台EXE不得混用。
+当前源码与最新预发布为 **v1.3.0-rc.4**；稳定 Latest 仍为 **v1.2.0**。唯一版本来源是 `src/sias_autologin/version.py`。不同版本安装器和后台EXE不得混用。
 
-代码组织见 [三层架构](ARCHITECTURE.md)，安装与模式选择见 [rc.3指南](releases/v1.3.0-rc.3.md)，全部入口见 [文档索引](README.md)。
+代码组织见 [三层架构](ARCHITECTURE.md)，安装与模式选择见 [rc.4指南](releases/v1.3.0-rc.4.md)，全部入口见 [文档索引](README.md)。
 
 ## 构建与发布
 
@@ -13,8 +13,10 @@ python -m unittest discover -s tests -v
 python -m unittest discover -s tools/experiments/login-diagnostics -v
 python -m unittest discover -s tools/experiments/login-monitor -v
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-TaskPreview.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-AcceptanceEvidence.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/Build-Installer.ps1
 python tests/check_task_recovery.py
+python tests/check_installer_lock.py
 python tests/check_bundle.py
 python tests/check_frozen_login.py
 ```
@@ -27,7 +29,7 @@ python tests/check_frozen_login.py
 
 ## 当前验证记录
 
-45项正式测试、5项诊断测试、4项监测测试通过，1项依赖本地捕获资料的测试跳过。Linux核心与Windows完整CI通过；任务XML、载荷、实际冻结程序认证、特殊字符凭据和失败回滚已验证。
+58项正式测试、5项诊断测试、4项监测测试通过，1项依赖本地捕获资料的测试跳过。Linux核心与Windows完整CI通过；任务XML、载荷、实际冻结程序认证、特殊字符凭据和失败回滚已验证；本轮增加强制验证失败文字、维护二次状态变化、跨窗口边界、真实安装器跨进程锁和验收日志归属检查。
 
 夜间验收应核对四项：任务按窗口启动、状态明确需认证时才登录、登录后查询确认恢复、窗口结束后退出。核对任务返回码及漏执行次数，详细日志保存在本地，不提交公开仓库。
 

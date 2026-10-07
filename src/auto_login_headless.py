@@ -56,7 +56,7 @@ class _CompatibilityClient(PortalClient):
 def query_authentication_state():
     return state.query_authentication_state(_CompatibilityClient(settings()))
 
-def run_login(*, validate_credentials=False):
+def run_login(*, validate_credentials=False, require_auth_required=False, before_auth=None, on_submit=None):
     started = time.monotonic()
     try:
         config = load_env_file(ENV_PATH)
@@ -71,7 +71,8 @@ def run_login(*, validate_credentials=False):
         )
         return 9
     return service.ensure_authenticated(username, password, client=_CompatibilityClient(settings()),
-                                        logger=LOGGER, validate_credentials=validate_credentials)
+                                        logger=LOGGER, validate_credentials=validate_credentials,
+                                        require_auth_required=require_auth_required, before_auth=before_auth, on_submit=on_submit)
 
 if __name__ == "__main__":
     sys.exit(cli.main(sys.modules[__name__]))

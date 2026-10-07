@@ -30,7 +30,7 @@ class LoginTests(unittest.TestCase):
                                (b'{success:false,msg:"denied"}', False),
                                (b"{'msg':'logon success','success':false}", False),
                                (b"{'success':true,'msg':'logon success'}", True),
-                               (b'<html>unsuccessful</html>', None)]:
+                               (b'<html>unsuccessful</html>', False)]:
             with self.subTest(body=body):
                 self.assertIs(login.response_indicates_success(body)[0], expected)
 

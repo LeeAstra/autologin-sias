@@ -9,6 +9,7 @@ import subprocess
 import time
 import uuid
 import xml.etree.ElementTree as ET
+from unittest.mock import patch
 
 from sias_autologin.platforms.windows import deployment, tasks
 from sias_autologin.runtime.monitor import in_window
@@ -96,6 +97,8 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
             time.sleep(.2)
         raise AssertionError('No fresh scheduled maintenance evidence for ' + str(target))
 
+    profile=patch.dict(os.environ,{'LOCALAPPDATA':str(area/'profile')})
+    profile.start()
     try:
         for mode in ('night', 'continuous'):
             target = area / (mode + '-original')
@@ -142,5 +145,8 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
             print(f'PASS: unsupported isolated task unchanged before mutation; mode={mode}')
             remove_task()
     finally:
-        remove_task()
+        try:
+            remove_task()
+        finally:
+            profile.stop()
     print('PASS: real temporary scheduled installation matrix; production task untouched')

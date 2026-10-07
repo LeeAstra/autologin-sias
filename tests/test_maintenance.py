@@ -41,6 +41,30 @@ class MaintenanceTests(unittest.TestCase):
                  sleep=lambda _:self.fail('A verified departure must exit immediately'))
         self.assertEqual(calls,[])
 
+    def test_network_unknown_never_queries_or_logs_each_iteration(self):
+        tick=[datetime(2026,1,1,3,14,40)]
+        def forbidden(): self.fail('Unknown Wi-Fi must not query or authenticate')
+        def sleep(seconds): tick[0]+=timedelta(seconds=seconds)
+        with self.assertLogs('network-unknown',level='INFO') as records:
+            maintain(mode='night',network=lambda:'network_unverified',query=forbidden,
+                     login=forbidden,logger=logging.getLogger('network-unknown'),
+                     clock=lambda:tick[0],sleep=sleep)
+        self.assertEqual(sum('Maintenance state:' in line for line in records.output),1)
+
+    def test_failed_authentication_waits_at_least_fifteen_seconds_after_completion(self):
+        tick=[datetime(2026,1,1,3,14)]
+        starts=[]; ends=[]
+        def sleep(seconds): tick[0]+=timedelta(seconds=seconds)
+        def login():
+            starts.append(tick[0]); tick[0]+=timedelta(seconds=2);ends.append(tick[0])
+            return 7
+        maintain(mode='night',network=lambda:'target_network',query=lambda:('auth_required','fixture'),
+                 login=login,logger=logging.getLogger('retry'),clock=lambda:tick[0],
+                 monotonic=lambda:tick[0].timestamp(),sleep=sleep)
+        self.assertGreaterEqual(len(starts),2)
+        for previous,next_start in zip(ends,starts[1:]):
+            self.assertGreaterEqual((next_start-previous).total_seconds(),15)
+
     def test_outside_window_does_not_query_network(self):
         def forbidden(): raise AssertionError('must not run')
         self.assertEqual(maintain(mode='night',network=forbidden,query=forbidden,login=forbidden,

@@ -42,6 +42,7 @@ jobs:
       - run: python tests/check_task_recovery.py
       - run: python tests/check_installer_lock.py
       - run: python tests/check_bundle.py
+      - run: python tests/check_live_wlan.py
       - run: python tests/check_frozen_login.py
       - uses: actions/upload-artifact@v7
         with:

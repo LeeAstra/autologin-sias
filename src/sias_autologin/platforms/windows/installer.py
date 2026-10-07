@@ -55,11 +55,11 @@ def _main():
     username = config['WLAN_USER'] if reuse else input('校园网账号：').strip()
     password = config['WLAN_PWD'] if reuse else getpass.getpass('校园网密码（不显示）：')
     print(f'将安装至 {target}，更新 AutoLogin_SIAS 任务为 {mode} 模式。')
-    print('旧程序和配置先备份；迁移成功后清理旧目录中的三个已识别文件，其他文件保留。')
+    print('旧程序和配置先备份；迁移时保留旧文件，待确认新目录维护正常后再处理。')
     if input('确认安装？[Y/n]：').strip().lower() == 'n':
         return
     install(payload_dir(), target, username, password, mode=mode, old_target=old_target)
-    print('部署完成。任务已更新并启动；夜间模式在时段外会直接退出。')
+    print('部署完成。任务已更新并请求启动；启动请求成功不代表维护已运行。夜间模式在时段外会正常退出。')
 
 
 

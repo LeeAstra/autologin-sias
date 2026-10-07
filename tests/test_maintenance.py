@@ -81,7 +81,7 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(maintain(mode='night',network=forbidden,query=forbidden,login=forbidden,
                         logger=logging.getLogger('test'),clock=lambda:datetime(2026,1,1,12)),0)
 
-    def test_migration_backs_up_and_only_cleans_identified_files(self):
+    def test_migration_backs_up_and_preserves_old_files_without_startup_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); old=root/'old'; payload=root/'payload'; target=root/'new'
             old.mkdir(); payload.mkdir()
@@ -92,7 +92,7 @@ class MaintenanceTests(unittest.TestCase):
             def runner(args,**kwargs): calls.append(args); return SimpleNamespace(returncode=0)
             with patch.dict(os.environ,{'LOCALAPPDATA':str(root),'SystemRoot':'C:/Windows'}):
                 installer.install(payload,target,'synthetic','synthetic',runner,mode='night',old_target=old)
-            self.assertEqual([p.name for p in old.iterdir()],['unrelated.txt'])
+            self.assertEqual({p.name for p in old.iterdir()}, {'unrelated.txt','.env','Install-AutoLoginTask.ps1','AutoLogin_SIAS_Headless.exe'})
             backup=next((root/'AutoLogin_SIAS_Backups').iterdir())
             self.assertEqual((backup/'.env').read_bytes(),b'old-config')
             self.assertIn('-Mode',calls[-2]); self.assertEqual(calls[-2][-1],'night')
@@ -102,7 +102,7 @@ class MaintenanceTests(unittest.TestCase):
             root=Path(directory); old=root/'old'; payload=root/'payload'; old.mkdir(); payload.mkdir()
             for name in ('AutoLogin_SIAS_Headless.exe','Install-AutoLoginTask.ps1'):
                 (old/name).write_bytes(b'old'); (payload/name).write_bytes(b'new')
-            results=iter([0,0,1])
+            results=iter([0,0,0,1])
             with patch.dict(os.environ,{'LOCALAPPDATA':str(root),'SystemRoot':'C:/Windows'}), self.assertRaises(RuntimeError):
                 installer.install(payload,root/'new','synthetic','synthetic',lambda *a,**k:SimpleNamespace(returncode=next(results)),mode='night',old_target=old)
             self.assertEqual((old/'AutoLogin_SIAS_Headless.exe').read_bytes(),b'old')

@@ -8,6 +8,8 @@
 
 **最新候选版 v1.3.0-rc.4：**两种维护模式、可选安装位置与备份迁移，源码采用认证核心／通用循环／Windows适配三层结构。[预发布下载](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0-rc.4) · [安装与升级](docs/releases/v1.3.0-rc.4.md)。夜间模式在配置窗口中检测并确认重登结果，持续模式与睡眠恢复等场景需按使用环境验收。[文档索引](docs/README.md) · [验证记录](docs/DEVELOPMENT.md)。下方四步教程对应v1.2.0稳定版。
 
+**v1.3.0 拟发布包：**正在做最终验收，尚未替代上方稳定下载。[新版安装/升级/恢复](docs/releases/v1.3.0.md) · [实机验收步骤](docs/RELEASE-ACCEPTANCE.md)。迁移时保留旧文件，启动请求成功不等于维护已运行。
+
 夜间连续实验的源码、测试和构建说明独立放在 [tools/experiments](tools/experiments/README.md)，不会随安装包部署，也不会修改计划任务。
 
 ## 第一次使用，按这 4 步操作

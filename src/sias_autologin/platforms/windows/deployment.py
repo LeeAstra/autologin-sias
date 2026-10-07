@@ -69,6 +69,9 @@ def _install(payload, target, username, password, runner=subprocess.run, *, mode
         raise ValueError('账号和密码不能为空或包含换行。')
     if mode not in (None, 'continuous', 'night'):
         raise ValueError('Unsupported maintenance mode')
+    payload = Path(payload).resolve()
+    tasks.preflight_task(payload / INSTALL_FILES[1], payload / INSTALL_FILES[0], runner, mode=mode)
+    snapshot = tasks.snapshot_task(runner) if mode else None
     target = Path(target).resolve()
     old_target = Path(old_target).resolve() if old_target else None
     target.mkdir(parents=True, exist_ok=True)
@@ -88,7 +91,6 @@ def _install(payload, target, username, password, runner=subprocess.run, *, mode
     child_env = dict(os.environ)
     child_env.pop('WLAN_USER', None)
     child_env.pop('WLAN_PWD', None)
-    snapshot = tasks.snapshot_task(runner) if mode else None
     if snapshot and snapshot['exists']:
         (backup / 'task-before.xml').write_text(snapshot['xml'], encoding='utf-8')
     registration_started = False
@@ -135,8 +137,11 @@ def _install(payload, target, username, password, runner=subprocess.run, *, mode
             raise
         raise RuntimeError(f'安装未完成（阶段：{phase}）；原文件和任务设置已恢复。请检查失败原因后重试。') from original
 
-    if mode:
-        _cleanup_migration(old_target, old_snapshot)
+    if mode and old_snapshot:
+        # Start-ScheduledTask acknowledges a request, not a successful process.
+        # Night mode can legitimately finish immediately outside its window.
+        print(f'新任务已请求启动，尚未确认本轮维护运行；旧文件保留在：{old_target}。'
+              '确认新目录运行正常后再处理旧文件；不要手动运行旧程序。')
 
 
 def _save_backup(previous, old_snapshot):
@@ -159,14 +164,3 @@ def _restore_files(previous, changed):
             path.unlink(missing_ok=True)
         else:
             replace_file(path, lambda staged: staged.write_bytes(content))
-
-
-def _cleanup_migration(old_target, old_snapshot):
-    # Run only after registration/start succeeds; remove only unchanged known files.
-    for name, content in old_snapshot.items():
-        source = old_target / name
-        try:
-            if source.is_file() and source.read_bytes() == content:
-                source.unlink()
-        except OSError:
-            print(f'旧文件暂未清理，可稍后手动处理：{source}')

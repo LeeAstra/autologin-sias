@@ -114,6 +114,15 @@ try:
             result=subprocess.run([str(exe),'--validate-credentials'],cwd=work,env=env,timeout=60)
             assert result.returncode==expected,(body,result.returncode,expected)
             assert any(r[1].endswith('/ac_portal/login.php') for r in requests)
+        for body, expected in ((b'{"success":true}',0),(b'{"success":false}',5)):
+            configure_response(body=body,prior='authenticated',post='authenticated')
+            conflict_env=dict(env,WLAN_USER='stale-user',WLAN_PWD='stale-password')
+            result=subprocess.run([str(exe),'--validate-credentials'],cwd=work,env=conflict_env,timeout=60)
+            assert result.returncode==expected
+            form=parse_qs(next(r[2] for r in requests if r[1].endswith('/ac_portal/login.php')).decode())
+            assert form['userName']==['synthetic-user'],form
+            assert form['pwd'][0]==rc4_hex('synthetic-password',form['auth_tag'][0])
+        print('Production frozen credential validation ignores conflicting environment values OK')
         print('Frozen EXE: forced online validation rejects failure/ambiguous messages OK')
 
         for prior, post, expected in [('authenticated', 'unknown', 0), ('unknown', 'authenticated', 0),
@@ -137,16 +146,39 @@ try:
         # Test-only frozen harness substitutes the WLAN observation. Production
         # artifacts never contain this hook or any environment-driven Wi-Fi bypass.
         hook=work/'fixture_wlan.py'
-        hook.write_text("from sias_autologin.platforms.windows import runner\nrunner.target_wifi=lambda ssid: 'target_network'\n")
+        hook.write_text("import os,sys\n"+
+                        "for stream in (sys.stdin,sys.stdout,sys.stderr):\n"
+                        "    if stream is not None and hasattr(stream,'reconfigure'): stream.reconfigure(encoding='utf-8')\n"+
+                        "for key in list(os.environ):\n"
+                        "    if key.upper() in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY','WLAN_USER','WLAN_PWD'): os.environ.pop(key,None)\n"+
+                        "os.environ.update(http_proxy="+repr(proxy)+",https_proxy="+repr(proxy)+",no_proxy='',USERNAME='FrozenAcceptance',USERDOMAIN='Fixture',WLAN_USER='fixture-stale-user',WLAN_PWD='fixture-stale-password')\n"+
+                        "import getpass\ngetpass.getpass=lambda prompt: input(prompt)\n"+
+                        "from sias_autologin.platforms.windows import runner\nrunner.target_wifi=lambda ssid: 'target_network'\n")
         spec=(root/'packaging/auto_login_headless.spec').read_text()
         spec=spec.replace("'../src/auto_login_headless.py'",repr(str(root/'src/auto_login_headless.py')))
         spec=spec.replace("'../src'",repr(str(root/'src')))
         spec=spec.replace('runtime_hooks=[]','runtime_hooks=['+repr(str(hook))+']')
         spec=spec.replace("name='AutoLogin_SIAS_Headless'","name='WlanPolicyFixture'")
+        spec=spec.replace('console=False','console=True')
         fixture_spec=work/'fixture.spec'; fixture_spec.write_text(spec)
         subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--distpath',str(work),
                         '--workpath',str(work/'build'),str(fixture_spec)],check=True,timeout=180)
         maintenance_exe=work/'WlanPolicyFixture.exe'
+        for body, expected in ((b'{"success":true}',0),(b'{"success":false}',5),
+                               (b'{"message":"login success: false"}',8)):
+            configure_response(body=body,prior='authenticated',post='authenticated')
+            write_env_file(work/'.env','previous-user','previous-password')
+            result=subprocess.run([str(maintenance_exe),'--setup'],cwd=work,
+                                  env=dict(env,WLAN_USER='stale-user',WLAN_PWD='stale-password'),
+                                  input='y\nnew-user\n new-password \n',text=True,capture_output=True,
+                                  encoding='utf-8',timeout=60)
+            assert result.returncode==expected,(result.returncode,result.stdout,result.stderr)
+            form=parse_qs(next(r[2] for r in requests if r[1].endswith('/ac_portal/login.php')).decode())
+            assert form['userName']==['new-user']
+            assert form['pwd'][0]==rc4_hex(' new-password ',form['auth_tag'][0])
+            assert ('配置测试成功' in result.stdout)==(expected==0),result.stdout
+        print('Test-only console frozen setup: saved credentials, online rejection and ambiguous response OK')
+        write_env_file(work/'.env','synthetic-user','synthetic-password')
         for latest,submitted,confirmed in [('unknown',False,False),('authenticated',False,True),('auth_required',True,True)]:
             configure_response(body=b'{"success":true}',status=200,prior=latest,post='authenticated',sequence=['auth_required',latest])
             log=work/'auto_login_headless.log'
@@ -200,6 +232,9 @@ try:
         print('Test-only frozen maintenance: skipped submission rechecks next cycle; rejected POST retains >=15s cooldown OK')
 
 
+        from frozen_task_acceptance import check_isolated_installations
+        check_isolated_installations(root,work,maintenance_exe,configure_response)
+
         # Exercise file deployment and the real child EXE. Only task registration
         # is replaced; its XML is covered separately by Test-TaskPreview.ps1.
         fixture_payload = work / 'payload'
@@ -218,7 +253,7 @@ try:
 
         configure_response(body=b'{"success":true}', status=200)
         install_autologin.install(fixture_payload, target, 'synthetic-user', 'synthetic-password', run_child)
-        assert len(task_calls) == 1
+        assert len(task_calls) == 2
         assert (target / exe_source.name).read_bytes() == exe_source.read_bytes()
         old_config = (target / '.env').read_bytes()
         configure_response(body=b"{'success':false,'msg':'denied'}", prior='authenticated', post='authenticated')
@@ -229,7 +264,7 @@ try:
             pass
         assert any(r[1].endswith('/ac_portal/login.php') for r in requests), 'Online credential validation skipped'
         assert (target / '.env').read_bytes() == old_config
-        assert len(task_calls) == 1, 'Task registration reached after failed authentication'
+        assert len(task_calls) == 3, 'Task registration reached after failed authentication'
         print('Deployment with real child EXE: success and failed-upgrade rollback OK')
 finally:
     server.shutdown()

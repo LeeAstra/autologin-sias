@@ -33,9 +33,9 @@ class InstallTests(unittest.TestCase):
             return SimpleNamespace(returncode=0)
         with patch.dict(os.environ, {'WLAN_PWD': 'stale', 'SystemRoot': 'C:\\Windows'}):
             installer.install(self.payload, self.target, 'user', 'secret', run)
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][0][1], '--validate-credentials')
-        self.assertNotIn('WLAN_PWD', calls[0][1]['env'])
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[1][0][1], '--validate-credentials')
+        self.assertNotIn('WLAN_PWD', calls[1][1]['env'])
         self.assertNotIn('secret', str(calls))
         self.assertEqual(load_env_file(self.target / '.env'), {'WLAN_USER': 'user', 'WLAN_PWD': 'secret'})
 
@@ -48,7 +48,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b'old')
 
     def test_task_failure_keeps_installed_payload(self):
-        results = iter([0, 1])
+        results = iter([0, 0, 1])
         with patch.dict(os.environ, {'SystemRoot': 'C:\\Windows'}), self.assertRaises(RuntimeError):
             installer.install(self.payload, self.target, 'user', 'secret', lambda *a, **k: SimpleNamespace(returncode=next(results)))
         self.assertTrue((self.target / '.env').exists())
@@ -62,7 +62,9 @@ class InstallTests(unittest.TestCase):
     def test_interrupt_during_login_restores_old_config(self):
         (self.target / '.env').write_bytes(b'old')
         def interrupted(*args, **kwargs):
-            raise KeyboardInterrupt()
+            if '--validate-credentials' in args[0]:
+                raise KeyboardInterrupt()
+            return SimpleNamespace(returncode=0)
         with self.assertRaises(KeyboardInterrupt):
             installer.install(self.payload, self.target, 'user', 'secret', interrupted)
         self.assertEqual((self.target / '.env').read_bytes(), b'old')

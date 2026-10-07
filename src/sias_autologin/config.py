@@ -1,5 +1,6 @@
 """Versioned credential serialization with legacy .env compatibility."""
 import json
+import os
 from pathlib import Path
 
 FORMAT_MARKER = '# AutoLogin_SIAS env-format=json-v1'
@@ -42,3 +43,8 @@ def write_env_file(path: Path, username: str, password: str) -> None:
 def find_env_path(base_dir):
     candidates = [base_dir / ".env", base_dir.parent / ".env", Path.cwd() / ".env"]
     return next((path for path in candidates if path.is_file()), candidates[0])
+
+def resolve_credentials(config, *, use_environment=True):
+    """Normal runs keep environment overrides; validation verifies saved values."""
+    return tuple((os.getenv(key) if use_environment else None) or config.get(key, '')
+                 for key in ('WLAN_USER', 'WLAN_PWD'))

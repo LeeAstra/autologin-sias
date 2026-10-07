@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import os
 import subprocess
+import tempfile
 from textwrap import dedent
 
 _FIND_TASK = "Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'"
@@ -99,3 +100,14 @@ def existing_directory():
     if not path.is_absolute() or path.name.lower() != 'autologin_sias_headless.exe':
         raise RuntimeError('已有任务不是可识别的自动登录程序，请先人工检查。')
     return path.resolve().parent
+
+def preflight_task(script, exe, runner=subprocess.run, *, mode=None):
+    """Use registration's own XML checks before stopping tasks or replacing files."""
+    with tempfile.TemporaryDirectory(prefix='autologin-preflight-') as folder:
+        command = [powershell_path(), '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
+                   'Bypass', '-File', str(script), '-ExePath', str(exe),
+                   '-ExportOnly', str(Path(folder) / 'preview.xml')]
+        if mode:
+            command += ['-Mode', mode]
+        if runner(command, timeout=30).returncode:
+            raise RuntimeError('旧任务或安装载荷检查未通过；未停止任务或替换文件。请检查上方错误。')

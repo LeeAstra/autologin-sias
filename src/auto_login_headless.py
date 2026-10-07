@@ -5,7 +5,7 @@ import sys
 import time
 from sias_autologin import cli
 from sias_autologin.version import VERSION
-from sias_autologin.config import load_env_file, write_env_file
+from sias_autologin.config import load_env_file, write_env_file, resolve_credentials
 from sias_autologin.core import portal, state, service
 from sias_autologin.core.authentication import rc4_hex, response_indicates_success
 from sias_autologin.core.portal import (
@@ -60,8 +60,7 @@ def run_login(*, validate_credentials=False, require_auth_required=False, before
     started = time.monotonic()
     try:
         config = load_env_file(ENV_PATH)
-        username = os.getenv("WLAN_USER") or config.get("WLAN_USER", "")
-        password = os.getenv("WLAN_PWD") or config.get("WLAN_PWD", "")
+        username, password = resolve_credentials(config, use_environment=not validate_credentials)
     except Exception as exc:
         LOGGER.error("Unexpected error: %s", type(exc).__name__)
         LOGGER.info(

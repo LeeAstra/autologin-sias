@@ -26,6 +26,8 @@ class RecoveryTests(unittest.TestCase):
             def runner(args, **kwargs):
                 nonlocal failed
                 calls.append(args)
+                if '-ExportOnly' in args:
+                    return SimpleNamespace(returncode=0)
                 if kwargs.get('capture_output'):
                     return SimpleNamespace(returncode=0, stdout=json.dumps(snapshot))
                 phase = ('validate' if '--validate-credentials' in args else
@@ -67,6 +69,43 @@ class RecoveryTests(unittest.TestCase):
                 with self.subTest(failure=failure, same_directory=same):
                     self.exercise(failure, same_directory=same)
 
+    def test_preflight_rejection_never_stops_task_or_touches_installation(self):
+        for mode in (None,'night','continuous'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root=Path(folder); payload=root/'payload'; payload.mkdir(); old=root/'old'; old.mkdir()
+                for name in deployment.INSTALL_FILES: (old/name).write_bytes(b'original')
+                calls=[]
+                def reject(args,**kwargs):
+                    calls.append(args)
+                    self.assertIn('-ExportOnly',args)
+                    return SimpleNamespace(returncode=1)
+                with patch.dict(os.environ,{'LOCALAPPDATA':folder,'SystemRoot':'C:/Windows'}):
+                    with self.assertRaisesRegex(RuntimeError,'未停止任务或替换文件'):
+                        installer.install(payload,root/'new','user','password',reject,mode=mode,old_target=old)
+                self.assertEqual(len(calls),1)
+                self.assertFalse((root/'new').exists())
+                self.assertFalse((root/'AutoLogin_SIAS_Backups').exists())
+                for name in deployment.INSTALL_FILES: self.assertEqual((old/name).read_bytes(),b'original')
+
+    def test_migration_start_acknowledgement_preserves_old_files_in_both_modes(self):
+        for mode in ('night','continuous'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root=Path(folder); old=root/'old'; old.mkdir(); payload=root/'payload'; payload.mkdir()
+                for name in deployment.INSTALL_FILES: (old/name).write_bytes(b'old')
+                for name in deployment.INSTALL_FILES[:2]: (payload/name).write_bytes(b'new')
+                (old/'unrelated.txt').write_bytes(b'keep')
+                def runner(args,**kwargs):
+                    if kwargs.get('capture_output'):
+                        return SimpleNamespace(returncode=0,stdout='{"exists":false}')
+                    return SimpleNamespace(returncode=0)
+                with patch.dict(os.environ,{'LOCALAPPDATA':folder,'SystemRoot':'C:/Windows'}), \
+                     patch('builtins.print') as output:
+                    installer.install(payload,root/'new','user','password',runner,mode=mode,old_target=old)
+                for name in deployment.INSTALL_FILES: self.assertEqual((old/name).read_bytes(),b'old')
+                self.assertEqual((old/'unrelated.txt').read_bytes(),b'keep')
+                self.assertIn('尚未确认',str(output.call_args_list))
+                self.assertIn('旧文件保留',str(output.call_args_list))
+
     def test_running_task_is_restarted_after_recovery(self):
         self.exercise('register', running=True)
 
@@ -81,7 +120,10 @@ class RecoveryTests(unittest.TestCase):
                 (payload/name).write_bytes(b'fixture')
             with patch.object(deployment.ctypes, 'WinDLL') as dll, patch.dict(os.environ,{'LOCALAPPDATA':folder}):
                 dll.return_value.GetFileAttributesW.return_value=0x4000
-                def forbidden(*args, **kwargs): raise AssertionError('Task must remain untouched')
+                def forbidden(args, **kwargs):
+                    if '-ExportOnly' in args: return SimpleNamespace(returncode=0)
+                    if kwargs.get('capture_output'): return SimpleNamespace(returncode=0,stdout='{"exists":false}')
+                    raise AssertionError('Task must remain untouched')
                 with self.assertRaisesRegex(ValueError,'EFS'):
                     installer.install(payload,root/'new','synthetic','synthetic',forbidden,mode='night')
             self.assertEqual(list((root/'new').iterdir()),[])
@@ -98,11 +140,11 @@ class RecoveryTests(unittest.TestCase):
                 (payload/name).write_bytes(b'fixture')
             def runner(args, **kwargs):
                 calls.append(args)
-                return SimpleNamespace(returncode=1)
+                return SimpleNamespace(returncode=0 if '-ExportOnly' in args else 1)
             with patch.dict(os.environ, {'LOCALAPPDATA': folder, 'SystemRoot':'C:/Windows'}):
                 with self.assertRaises(RuntimeError):
                     installer.install(payload,root/'new','synthetic','synthetic',runner,mode='night')
-            self.assertEqual(len(calls),1)
+            self.assertEqual(len(calls),2)
             self.assertNotIn('Disable-ScheduledTask', calls[0][-1])
 
     def test_restore_preserves_disabled_xml_and_does_not_enable_or_start(self):
@@ -121,6 +163,8 @@ class RecoveryTests(unittest.TestCase):
             for name in ('AutoLogin_SIAS_Headless.exe','Install-AutoLoginTask.ps1'):
                 (payload/name).write_bytes(b'fixture')
             def runner(args,**kw):
+                if '-ExportOnly' in args:
+                    return SimpleNamespace(returncode=0)
                 if kw.get('capture_output'):
                     return SimpleNamespace(returncode=0,stdout='{"exists":false}')
                 return SimpleNamespace(returncode=1 if '-File' in args or 'Unregister-ScheduledTask' in args[-1] else 0)

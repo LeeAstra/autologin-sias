@@ -1,71 +1,87 @@
-# v1.3.0 发布验收
+# v1.3.0 正式发布前验收
 
-状态：rc.7 候选，正式版尚未发布。测试不能证明绝对无缺陷；发布条件是自动化、打包、CI 与下面的真实使用流程均通过，无已知阻断问题。
+当前是版本号为1.3.0的拟发布包，不代表已发布；正式标签和Release等待本清单完成。版本、提交、CI、打包来源和SHA256必须一致。旧审查已修复项保留回归，本轮不重做已完成修复。
 
-## 自动化验收
+## 自动化范围
 
-先运行 `python tests/check_task_commands.py`（只解析安装器生成的命令，不修改任务）。运行 DEVELOPMENT 中的测试/构建命令，并运行 `python tests/check_task_recovery.py`。后者仅在 Windows 管理员环境创建唯一名称的临时任务验证恢复，结束后清理；不会修改 AutoLogin_SIAS。若输出 SKIP，此项仍待验证，不能记为通过。冻结安装器互斥使用 tests/check_installer_lock.py；证据混合/轮转使用 tests/Test-AcceptanceEvidence.ps1。
+按 DEVELOPMENT 运行完整测试及构建。单元测试覆盖保存配置与环境冲突、已在线/错误凭据、认证未知、离开目标网络、窗口结束/跨午夜及实际提交重试。Test-TaskPreview.ps1 只读生成XML并拒绝八类不支持任务。check_task_recovery.py 在Windows管理员环境用唯一临时任务检查完整恢复。check_frozen_login.py 验证生产EXE、测试控制台配置向导及真实隔离任务的新装/原位升级/迁移、两种模式、在线拒绝后恢复和不支持旧任务在修改前退出。
 
-## 实机操作（按顺序）
+测试任务使用随机名称和临时目录，冻结任务夹具强制使用loopback代理、合成凭据及模拟WLAN。生产包没有这些钩子。非管理员本机跳过真实临时任务测试；CI必须实际通过。模拟不能替代真实UAC、Wi-Fi事件、睡眠及自然登出。
 
-先保存旧状态 JSON；关闭独立实验监测，避免同时认证。先连接 UESTC，使用同一 Windows 账户允许 UAC。使用 rc.7 安装器，失败即停止后续测试并按模板报告，不要手动删除文件/任务。
+## 操作位置与影响
 
-1. A 原位升级：运行安装器，填当前安装目录 `D:\Apps\AutoLogin_SIAS`（如实际目录不同，以现有任务路径为准），模式选 2，保留旧凭据，确认安装。应显示部署完成；等待60秒再采集状态，任务启用，参数为 `--maintain night`。白天正常退出，不要求立即登录。
-2. B 迁移与持续模式：再次运行同一安装器，填 `D:\Apps\AutoLogin_SIAS-Acceptance` 等新的绝对目录（普通、未启用 EFS 加密的本地目录），选 1 并保留凭据。应显示部署完成；等待60秒再采集状态，旧目录仅后台 EXE、任务脚本和独立 .env 被清理，其他文件保留，新目录存在三个文件。
-3. C 断网重连：连接 UESTC 后等待 60 秒，观察任务运行；手动断开 Wi-Fi，等待 60 秒，确认任务退出；重新连接 UESTC，等待 60 秒，确认任务重新运行。如可用，再连接其他 Wi-Fi 等待 60 秒，确认维护程序退出且没有认证提交，再重连 UESTC。不要关闭 WLAN 事件日志。
-4. D 睡眠恢复：保持模式 1 和 UESTC，让电脑睡眠至少 1 分钟，恢复后等待 60 秒；确认任务恢复运行。若没有恢复，先运行状态采集再报告，不能用手动启动替代通过。
-5. E 恢复夜间模式并实测：运行安装器，使用最终安装目录 `D:\Apps\AutoLogin_SIAS`，选 2，确认任务参数 `--maintain night`。夜间保持电脑唤醒、连接 UESTC，覆盖 2026-10-08（或实际测试日）02:55～03:15；次日上午在切换 Wi-Fi、重装或手动启动前采集状态，避免最新运行替代夜间证据。若已触发新运行，同时保留完整轮转日志供核对。应看到启动、认证状态、需要时登录后恢复、窗口结束退出，返回码 0 且无漏执行。没有观察到登出则填写未观察到，不能记为重新登录成功。
+仓库：`D:\OneDrive\Temp\Learning\autologin`。
+拟发布安装器：`packaging\dist\AutoLogin_SIAS_Installer.exe`。
+校验和与构建来源：同目录 `SHA256SUMS.txt`、`BUILD-INFO.json`。
+当前原目录预期为 `D:\Apps\AutoLogin_SIAS`，先在任务“操作”中确认，若不同就用实际目录做步骤A。
 
-开始步骤 A 前，以同一账户打开管理员 PowerShell，在 `D:\OneDrive\Temp\Learning\autologin` 中运行。先建立保存函数并保存 before，再按上文完成各步，每步用不同标签保存 JSON：
+A/B/E 会真实停止并更新你自己的 AutoLogin_SIAS 任务、替换选定目录程序/配置，并提交一次校园认证验证保存凭据；失败尝试恢复原文件和任务。迁移保留旧文件，不自动删除。C 手动断开Wi-Fi会暂时失去网络；D 睡眠会中断运行中的办公活动。E 只观察自然登出，不要求主动注销。没有电源策略变更。不要在未保存工作的情况下做C/D；不要另开独立循环实验与维护程序同时认证。
+
+先连接UESTC并准备自己的校园凭据，使用同一Windows账户允许UAC；不要使用另一管理员账户提权。此前自动测试已覆盖错误凭据，无需在真实校园网尝试错误密码。
+
+## 一次准备证据保存
+
+以同一账户打开**管理员Windows PowerShell**，粘贴以下完整内容。保存函数先检查JSON和退出码，再写入桌面文件夹；不会输出账号密码。若旧任务不存在，则跳过before保存并注明新安装。
 
 ```powershell
 Set-Location 'D:\OneDrive\Temp\Learning\autologin'
-$acceptanceFolder = Join-Path ([Environment]::GetFolderPath('Desktop')) 'AutoLogin-rc7-验收'
+$acceptanceFolder = Join-Path ([Environment]::GetFolderPath('Desktop')) 'AutoLogin-v1.3.0-验收'
 New-Item -ItemType Directory -Path $acceptanceFolder -Force | Out-Null
 function Save-AutoLoginAcceptance([string]$Label) {
-    & .\scripts\windows\Get-AcceptanceStatus.ps1 |
-        Set-Content -LiteralPath (Join-Path $acceptanceFolder ($Label + '.json')) -Encoding UTF8
+    $json = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\Get-AcceptanceStatus.ps1
+    if ($LASTEXITCODE -ne 0) { throw '采集失败，请返回错误原文。' }
+    $text = $json -join "`n"
+    $null = $text | ConvertFrom-Json -ErrorAction Stop
+    $text | Set-Content -LiteralPath (Join-Path $acceptanceFolder ($Label + '.json')) -Encoding UTF8
 }
+Get-ScheduledTask -TaskName AutoLogin_SIAS -TaskPath '\' |
+    Select-Object -ExpandProperty Actions | Select-Object Execute,Arguments
+Get-FileHash .\packaging\dist\AutoLogin_SIAS_Installer.exe -Algorithm SHA256
+Get-Content .\packaging\dist\BUILD-INFO.json
 Save-AutoLoginAcceptance 'before'
-# 完成相应步骤后分别执行，不能一次运行下面所有命令：
-# Save-AutoLoginAcceptance 'A'
-# Save-AutoLoginAcceptance 'B'
-# Save-AutoLoginAcceptance 'C-disconnected'
-# Save-AutoLoginAcceptance 'C-other-wifi'
-# Save-AutoLoginAcceptance 'C-reconnected'
-# Save-AutoLoginAcceptance 'D'
-# Save-AutoLoginAcceptance 'E'
 ```
 
+## 按顺序执行（失败时停止后续步骤）
 
-脚本只读，输出任务设置和匹配本次运行的带时间事件，不输出账号密码。schema 必须是 autologin-acceptance-v2；版本来自本轮日志，旧版无结构化证据时为 UNKNOWN_VERSION。evidence_status=unconfirmed 不能填 PASS。evidence 包含 run_id、started_at、ended_at、observed_logout、authentication_submitted、recovery_confirmed；没有认证提交不能填写重新登录成功。把每步的 JSON 保存供回复；步骤 C 要采集断开后、重连后各一次。运行中的 last_result 可能是 267009（0x41301），表示正在运行，不能据此判失败；结合 task_state 判断。
+| 步骤 | 完整操作 | 预期结果 | 保存证据 |
+|---|---|---|---|
+| A 原位升级 | 双击上述安装器，目录填旧任务的实际目录；选2夜间模式；保留凭据并确认。等60秒。 | 部署完成、任务已请求启动；task_enabled=true、arguments=--maintain night、当前运行version=1.3.0。白天应有outside_night_window的结束记录，正常返回0。 | `Save-AutoLoginAcceptance 'A'`；记安装输出。 |
+| B 更换目录 | 再运行同一安装器，目录填D:\Apps\AutoLogin_SIAS-Acceptance，选1持续模式，保留凭据并确认，等60秒。 | 新目录有EXE/任务脚本/.env；任务动作指向新目录并有新版本维护日志。明确提示尚未确认启动/保留旧文件；旧目录三个文件及其他文件均保留。 | `Save-AutoLoginAcceptance 'B'`；记旧文件保留和提示。 |
+| C1 离开UESTC | 手动断开Wi-Fi，等60秒。不要手动停止任务。 | 持续维护自动退出，当前轮end.reason=left_target_wifi，退出码0。 | `Save-AutoLoginAcceptance 'C-disconnected'`。 |
+| C2 其他Wi-Fi（可选） | 若有其他网络，连接它并等60秒；没有则填NOT_RUN。 | 不维护其他SSID，没有新的认证提交。 | `Save-AutoLoginAcceptance 'C-other-wifi'`。 |
+| C3 重连 | 重新连接UESTC，等60秒，不手动启动任务。 | WLAN事件触发新运行，version=1.3.0、mode=continuous，并查询认证状态。 | `Save-AutoLoginAcceptance 'C-reconnected'`。 |
+| D 睡眠恢复 | 保持UESTC和持续模式，保存工作，睡眠至少1分钟，恢复后等60秒。 | 维护恢复或事件触发新运行；不能用手动启动代替。未恢复先采集再报告。 | `Save-AutoLoginAcceptance 'D'`。 |
+| E 回到最终夜间模式 | 同一安装器选择D:\Apps\AutoLogin_SIAS（或你的最终目录），选2，确认后保存E-ready。夜间保持电脑唤醒、连接UESTC，覆盖实际测试日02:55～03:15。 | 按窗口启动、仅明确需认证时提交、提交后确认恢复、结束窗口后退出。无自然登出则只确认窗口运行，重登仍待观察。 | 安装后`Save-AutoLoginAcceptance 'E-ready'`；次日上午先执行`Save-AutoLoginAcceptance 'E'`。 |
 
-## 固定回复模板
+次日上午先采集E，再切换网络、重装或手动启动，避免最新运行覆盖夜间证据。若已经触发新轮次，保留完整日志及轮转文件供核对。测试时不要求修改电源配置，但电脑必须实际保持唤醒；睡眠中的漏执行不能填通过。
 
-复制后仅填写 PASS / FAIL / NOT_RUN，无法确认填 NOT_RUN。不要把预期结果当实测结果。
+## 返回内容与判定
+
+返回桌面验收文件夹的JSON，以及下面固定模板。不要返回.env或文件备份中的凭据。运行中的last_result=267009（0x41301）不是失败；结合task_state和当前run_id检查。evidence_status=running可证明运行中，complete可证明完整退出，unconfirmed不能推断成功。observed_logout、authentication_submitted、recovery_confirmed是不同证据；无提交不能声称程序完成重登。
 
 ```text
-验收版本：1.3.0-rc.7
-A 原位升级：
-B 迁移及旧文件清理：
-C 断网退出：
-C 其他 Wi-Fi 退出（没有可用网络填 NOT_RUN）：
-C 重连自动启动：
-D 睡眠恢复：
-E 夜间窗口运行：
-E 是否观察到登出并重新登录：是 / 否 / 未观察到登出
-多无线网卡实测：PASS / FAIL / NOT_RUN（只有具备此硬件时测试）
-当前最终目录：
-当前最终模式：night / continuous
-各步状态JSON：按 A、B、C断开、C其他网络（如有）、C重连、D、E 的顺序粘贴
-异常发生步骤：无 / A / B / C / D / E
-异常提示原文：无 / 原样粘贴（不含凭据）
+验收版本：1.3.0
+BUILD-INFO提交：
+安装器SHA256：
+原任务目录：
+A 原位升级：PASS / FAIL / NOT_RUN
+B 迁移及旧文件保留：PASS / FAIL / NOT_RUN
+C1 断网自动退出：PASS / FAIL / NOT_RUN
+C2 其他Wi-Fi不维护：PASS / FAIL / NOT_RUN
+C3 重连自动启动：PASS / FAIL / NOT_RUN
+D 睡眠恢复：PASS / FAIL / NOT_RUN
+E 夜间日期：YYYY-MM-DD
+E 02:55～03:15窗口运行：PASS / FAIL / NOT_RUN
+E 自然登出：观察到 / 未观察到
+E 实际提交并确认恢复：是 / 否 / 未观察到登出
+最终目录：
+最终模式：night / continuous
+状态JSON：附before、A、B、C1、C2（如有）、C3、D、E-ready、E
+安装输出/异常原文：无 / 原样粘贴（不含凭据）
 ```
 
-如需删除旧安装目录额外文件、修改电源策略或使用全新账户测试，另行明确步骤；本轮不要求这些操作。完整 UAC 向导通过步骤 A/B 实测。未完成项目保持待验收，正式版不得标记为已验证。
+## 最终发布门槛
 
-## 不能由自动化替代的测试
+没有已知影响登录、安装、升级或恢复的未修复问题；当前提交完整Windows/Linux CI、最终生产EXE和隔离任务验证通过；本机A/B/C1/C3/D/E真实证据通过。C2或多无线网卡硬件缺失可如实列限制，不伪造通过。没有自然登出证据时继续夜间观测，不把历史rc或独立实验成功作为当前拟发布包证据。
 
-A/B 的真实 UAC 向导、凭据验证和目录迁移，C 的网络事件触发，D 的睡眠恢复，E 的自然登出恢复需要本机操作。自动化已覆盖 WLAN 服务不可用、未知状态、多网卡与 API 资源释放路径；不要求为测试关闭本机 WLAN 服务。具备多无线网卡时可补测一个接口连接 UESTC、另一个接口连接其他网络，并记录接口组合。未具备的硬件测试如实记 NOT_RUN。
-
-白天夜间模式退出属于预期；没有登出证据仍需继续夜间观测。认证失败若有实际提交，重试间隔至少15秒；未提交的未知状态按正常5秒检测。最终发布必须核对当前提交的 CI、候选包哈希及 A～E 证据，不能用历史运行的成功代替本轮验收。
+通过后从验证过的同一组二进制发布v1.3.0，附SHA256和BUILD-INFO；不覆盖历史候选标签/资产。迁移旧文件保留、未签名、系统WLAN权限和唤醒限制应进入Release说明。

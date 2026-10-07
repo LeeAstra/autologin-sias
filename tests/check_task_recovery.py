@@ -37,7 +37,7 @@ try:
                         # Simulate a registration that changed the task, then failed verification.
                         ps("$ErrorActionPreference='Stop'; Enable-ScheduledTask -TaskName '"+name+"' | Out-Null")
                         return subprocess.CompletedProcess(args,1)
-                    args=list(args); args[-1]=args[-1].replace('AutoLogin_SIAS',name)
+                    args=list(args); args[-1]=args[-1].replace("'AutoLogin_SIAS'", "'"+name+"'")
                     return subprocess.run(args,**kwargs)
                 with patch.dict(os.environ,{'LOCALAPPDATA':str(root)}):
                     try:

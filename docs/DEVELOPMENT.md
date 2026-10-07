@@ -15,9 +15,11 @@ python -m unittest discover -s tools/experiments/login-monitor -v
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-TaskPreview.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-AcceptanceEvidence.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/Build-Installer.ps1
+python tests/check_task_commands.py
 python tests/check_task_recovery.py
 python tests/check_installer_lock.py
 python tests/check_bundle.py
+python tests/check_live_wlan.py
 python tests/check_frozen_login.py
 ```
 
@@ -29,7 +31,7 @@ python tests/check_frozen_login.py
 
 ## 当前验证记录
 
-58项正式测试、5项诊断测试、4项监测测试通过，1项依赖本地捕获资料的测试跳过。Linux核心与Windows完整CI通过；任务XML、载荷、实际冻结程序认证、特殊字符凭据和失败回滚已验证；本轮增加强制验证失败文字、维护二次状态变化、跨窗口边界、真实安装器跨进程锁和验收日志归属检查。
+81项正式测试、5项诊断测试、4项监测测试通过，1项依赖本地捕获资料的测试跳过。Linux核心与Windows完整CI通过；任务XML、载荷、实际冻结程序认证、特殊字符凭据和失败回滚已验证；本轮增加强制验证失败文字、维护二次状态变化、跨窗口边界、真实安装器跨进程锁和验收日志归属检查。
 
 夜间验收应核对四项：任务按窗口启动、状态明确需认证时才登录、登录后查询确认恢复、窗口结束后退出。核对任务返回码及漏执行次数，详细日志保存在本地，不提交公开仓库。
 
@@ -45,6 +47,10 @@ python tests/check_frozen_login.py
 
 修复文字成功前缀误判和未提交认证进入15秒冷却。文字成功改为完整格式匹配，重复否定规则合并；维护回调只接受LoginResult，删除整数兼容与重复类型分支，单次认证接口不变。81项单元回归覆盖新样例、在线强制验证、5秒重查和真正提交后15秒等待；冻结回归直接记录loopback服务收到POST的时间。
 
-结构审阅：认证解析134行、最大函数39行；维护模块80行、循环58行；安装器295行、部署事务97行。核心/循环/平台分界仍清楚。安装器集中向导、文件事务和任务编排，嵌入PowerShell长字符串，是后续维护重点；旧入口适配层承担现有实验和旧接口兼容。没有用新增模块或依赖来掩盖问题，也没有删除回滚、互斥和提交保护。本轮不改安装状态或计划任务，正式发布仍等待实机验收。
+认证核心、通用循环、平台适配保持分层；旧入口适配层继续承担现有实验和旧接口兼容。rc.6 审阅发现安装器集中多种职责，已在 rc.7 整理。
 
-资源性能表对应rc.5历史测量；rc.6未重新跑完整开销比较。最新验收使用rc.6，见[发布验收](RELEASE-ACCEPTANCE.md)。
+资源性能表对应rc.5历史测量；rc.6/rc.7未重新跑完整开销比较。最新验收使用rc.7，见[发布验收](RELEASE-ACCEPTANCE.md)。
+
+## rc.7 安装器整理
+
+向导、文件部署事务、任务快照与恢复分开；备份、文件恢复和迁移清理各自集中。保留跨进程互斥、旧入口和完整回滚，不增加运行依赖。7种生成命令在Windows PowerShell中只做语法解析；真实临时任务恢复在管理员CI中验证。安装路径、两种模式、触发条件和电源策略保持原样；本轮不改本机安装状态。

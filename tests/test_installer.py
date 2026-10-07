@@ -8,6 +8,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from credentials import load_env_file
+from sias_autologin.platforms.windows import deployment
 
 spec = importlib.util.spec_from_file_location('installer', Path(__file__).resolve().parents[1] / 'src/install_autologin.py')
 installer = importlib.util.module_from_spec(spec)
@@ -70,8 +71,8 @@ class InstallTests(unittest.TestCase):
     def test_locked_target_is_not_truncated(self):
         target = self.target / 'existing.exe'
         target.write_bytes(b'original')
-        with patch.object(installer.os, 'replace', side_effect=PermissionError('locked')), \
-             patch.object(installer.time, 'sleep'), self.assertRaises(PermissionError):
+        with patch.object(deployment.os, 'replace', side_effect=PermissionError('locked')), \
+             patch.object(deployment.time, 'sleep'), self.assertRaises(PermissionError):
             installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
         self.assertEqual(target.read_bytes(), b'original')
         self.assertEqual(list(self.target.iterdir()), [target])
@@ -86,7 +87,7 @@ class InstallTests(unittest.TestCase):
             if len(attempts) == 1:
                 raise PermissionError('locked')
             return replace(source, destination)
-        with patch.object(installer.os, 'replace', side_effect=temporarily_locked), patch.object(installer.time, 'sleep'):
+        with patch.object(deployment.os, 'replace', side_effect=temporarily_locked), patch.object(deployment.time, 'sleep'):
             installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
         self.assertEqual(target.read_bytes(), b'new')
         self.assertEqual(len(attempts), 2)

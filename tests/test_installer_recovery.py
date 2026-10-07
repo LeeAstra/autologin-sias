@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from sias_autologin.platforms.windows import installer
+from sias_autologin.platforms.windows import installer, deployment
 
 class RecoveryTests(unittest.TestCase):
     def exercise(self, failure, *, exists=True, running=False, same_directory=False):
@@ -79,7 +79,7 @@ class RecoveryTests(unittest.TestCase):
             root=Path(folder); payload=root/'payload'; payload.mkdir()
             for name in ('AutoLogin_SIAS_Headless.exe','Install-AutoLoginTask.ps1'):
                 (payload/name).write_bytes(b'fixture')
-            with patch.object(installer.ctypes, 'WinDLL') as dll, patch.dict(os.environ,{'LOCALAPPDATA':folder}):
+            with patch.object(deployment.ctypes, 'WinDLL') as dll, patch.dict(os.environ,{'LOCALAPPDATA':folder}):
                 dll.return_value.GetFileAttributesW.return_value=0x4000
                 def forbidden(*args, **kwargs): raise AssertionError('Task must remain untouched')
                 with self.assertRaisesRegex(ValueError,'EFS'):

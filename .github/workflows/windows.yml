@@ -39,6 +39,7 @@ jobs:
         run: .\tests\Test-AcceptanceEvidence.ps1
       - shell: powershell
         run: .\scripts\Build-Installer.ps1
+      - run: python tests/check_task_commands.py
       - run: python tests/check_task_recovery.py
       - run: python tests/check_installer_lock.py
       - run: python tests/check_bundle.py

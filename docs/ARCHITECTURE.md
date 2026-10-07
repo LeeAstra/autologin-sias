@@ -46,3 +46,5 @@ Windows 构建使用 `scripts/build/Build-Installer.ps1`，任务脚本在 `scri
 Windows Wi-Fi 使用 `platforms/windows/network.py` 中的 WLAN API。函数每次重新打开会话、枚举接口并查询当前连接；所有 API 内存与句柄在 finally 中释放。固定32位枚举/DWORD和16位 WCHAR保证 ABI 一致。System32 限定 DLL 搜索；缓存仅包含函数绑定，不包含连接状态。断开为 wrong_network，服务、权限、查询错误或连接过渡为 network_unverified；任一网卡明确连接 UESTC 可提供目标网络证据。
 
 维护循环的login回调必须返回LoginResult，真实提交记录决定冷却；未知跳过不消耗重试预算。整数返回值只保留在认证核心和单次CLI，由Windows适配包装；维护层不再猜测整数结果是否提交。文字响应成功使用完整格式白名单，结构化结果仍优先。
+
+安装器按职责拆成三个模块：`installer.py` 负责交互向导和兼容入口，`deployment.py` 负责文件部署、备份、回滚和有限迁移清理，`tasks.py` 负责计划任务发现、完整 XML 快照和恢复。全局安装锁仍在读取旧状态前取得，部署入口也保留锁，嵌套调用复用所有权。任务命令集中生成；语法测试只解析、不执行，真实临时任务回归另外验证恢复行为。原安装入口和公开兼容函数保留，无新增运行依赖。

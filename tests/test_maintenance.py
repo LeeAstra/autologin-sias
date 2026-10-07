@@ -9,11 +9,11 @@ from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from sias_autologin.runtime.monitor import maintain, in_window, LoginResult
-from sias_autologin.platforms.windows import installer
+from sias_autologin.platforms.windows import installer, deployment, tasks
 
 class MaintenanceTests(unittest.TestCase):
     def setUp(self):
-        snapshot = patch.object(installer, 'snapshot_task', return_value={'exists': False})
+        snapshot = patch.object(tasks, 'snapshot_task', return_value={'exists': False})
         snapshot.start()
         self.addCleanup(snapshot.stop)
 
@@ -127,7 +127,7 @@ class MaintenanceTests(unittest.TestCase):
             target.write_bytes(b'old')
             error = OSError('synthetic cross-device error')
             error.winerror = 17
-            with patch.object(installer.os, 'replace', side_effect=error):
+            with patch.object(deployment.os, 'replace', side_effect=error):
                 installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
             self.assertEqual(target.read_bytes(), b'new')
 

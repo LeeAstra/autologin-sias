@@ -1,6 +1,7 @@
 """Single-file Windows deployment wizard; payloads are bundled by PyInstaller."""
 from pathlib import Path
 import getpass
+import json
 import ctypes
 import os
 import shutil
@@ -48,6 +49,20 @@ def replace_file(path, writer):
         staged.unlink(missing_ok=True)
 
 
+def check_install_directory(target):
+    """S4U scheduled tasks cannot reliably read EFS-encrypted installations."""
+    if os.name != 'nt':
+        return
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetFileAttributesW.argtypes = [ctypes.c_wchar_p]
+    kernel.GetFileAttributesW.restype = ctypes.c_uint32
+    attributes = kernel.GetFileAttributesW(str(target))
+    if attributes == 0xFFFFFFFF:
+        raise ctypes.WinError(ctypes.get_last_error())
+    if attributes & 0x4000:
+        raise ValueError('安装目录启用了 EFS 加密，计划任务可能无法读取。请选择未加密的本地目录。')
+
+
 def install(payload, target, username, password, runner=subprocess.run, *, mode=None, old_target=None):
     if not username or not password or any(c in username + password for c in '\r\n'):
         raise ValueError('账号和密码不能为空或包含换行。')
@@ -56,6 +71,7 @@ def install(payload, target, username, password, runner=subprocess.run, *, mode=
     target = Path(target).resolve()
     old_target = Path(old_target).resolve() if old_target else None
     target.mkdir(parents=True, exist_ok=True)
+    check_install_directory(target)
     old_snapshot = {}
     if old_target and old_target != target:
         for name in ('AutoLogin_SIAS_Headless.exe', 'Install-AutoLoginTask.ps1', '.env'):
@@ -82,48 +98,68 @@ def install(payload, target, username, password, runner=subprocess.run, *, mode=
     child_env = dict(os.environ)
     child_env.pop('WLAN_USER', None)
     child_env.pop('WLAN_PWD', None)
-    if mode:
-        control_task('stop', runner)
+    snapshot = snapshot_task(runner) if mode else None
+    if snapshot and snapshot['exists']:
+        (backup / 'task-before.xml').write_text(snapshot['xml'], encoding='utf-8')
+    registration_started = False
+    phase = '停止旧任务'
     try:
+        if mode:
+            control_task('stop', runner)
+        phase = '部署文件'
         for path in (exe, script):
             if previous[path] != (payload / path.name).read_bytes():
                 changed.append(path)
                 replace_file(path, lambda staged: shutil.copy2(payload / path.name, staged))
         changed.append(config)
         replace_file(config, lambda staged: write_env_file(staged, username, password))
+        phase = '验证凭据'
         result = runner([str(exe), '--validate-credentials'], cwd=str(target), env=child_env, timeout=90)
         if result.returncode:
             raise RuntimeError(f'登录验证失败（退出码 {result.returncode}），请检查校园网连接、账号及日志。')
-    except BaseException:
-        for path in reversed(changed):
-            content = previous[path]
-            if content is None:
-                path.unlink(missing_ok=True)
-            else:
-                replace_file(path, lambda staged: staged.write_bytes(content))
+        powershell = powershell_path()
+        phase = '注册计划任务'
+        registration_started = True
+        result = runner([powershell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
+                         'Bypass', '-File', str(script), '-ExePath', str(exe)] + (['-Mode', mode] if mode else []),
+                        cwd=str(target), timeout=120)
+        if result.returncode:
+            raise RuntimeError('自动任务注册或验证失败。')
         if mode:
-            control_task('start', runner, required=False)
-        raise
-    # Once registration begins, retain installed files even on failure: a task
-    # may already reference them. The task script backs up the previous XML.
-    powershell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
-    result = runner([str(powershell), '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
-                     'Bypass', '-File', str(script), '-ExePath', str(exe)] + (['-Mode', mode] if mode else []),
-                    cwd=str(target), timeout=120)
-    if result.returncode:
-        raise RuntimeError('登录已验证，但自动任务安装失败。文件已保留，请根据上方错误处理后重新运行安装程序。')
+            phase = '启动计划任务'
+            control_task('start', runner)
+    except BaseException as original:
+        # Legacy single-operation callers retain files if registration may have
+        # referenced them. Maintenance upgrades restore the complete transaction.
+        if not mode and registration_started:
+            raise RuntimeError('自动任务安装失败，文件已保留，请检查后重试。') from original
+        try:
+            if mode:
+                control_task('stop', runner)
+            for path in reversed(changed):
+                content = previous[path]
+                if content is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    replace_file(path, lambda staged: staged.write_bytes(content))
+            if mode:
+                restore_task(snapshot, backup, runner)
+        except BaseException as recovery:
+            raise RuntimeError(f'安装失败且自动恢复未完成。请保留文件并使用备份检查恢复：{backup if mode else target}') from recovery
+        if not mode:
+            raise
+        raise RuntimeError(f'安装未完成（阶段：{phase}）；原文件和任务设置已恢复。请检查失败原因后重试。') from original
 
     if mode:
-        control_task('start', runner)
         # Do not remove the source until task registration succeeded, and never
         # touch other files or remove the directory itself.
         for name, content in old_snapshot.items():
             source = old_target / name
-            if source.is_file() and source.read_bytes() == content:
-                try:
+            try:
+                if source.is_file() and source.read_bytes() == content:
                     source.unlink()
-                except OSError:
-                    print(f'旧文件暂未清理，可稍后手动处理：{source}')
+            except OSError:
+                print(f'旧文件暂未清理，可稍后手动处理：{source}')
 
 
 def powershell_path():
@@ -131,16 +167,49 @@ def powershell_path():
 
 
 def control_task(action, runner=subprocess.run, *, required=True):
-    command = "$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { "
+    command = "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { "
     command += ("Disable-ScheduledTask -InputObject $task | Out-Null; Stop-ScheduledTask -InputObject $task; $deadline=(Get-Date).AddSeconds(15); while ((Get-ScheduledTask -TaskPath '\\' -TaskName 'AutoLogin_SIAS').State -eq 'Running') { if ((Get-Date) -gt $deadline) { throw 'Task did not stop' }; Start-Sleep -Milliseconds 200 }" if action == 'stop' else "Enable-ScheduledTask -InputObject $task | Out-Null; Start-ScheduledTask -InputObject $task") + ' }'
     result = runner([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], timeout=30)
     if result.returncode and required:
         raise RuntimeError('无法停止或启动已有任务，请检查权限和任务状态。')
 
 
+def snapshot_task(runner=subprocess.run):
+    """Capture settings before disabling; malformed output must fail closed."""
+    command = "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { @{exists=$true; xml=(Export-ScheduledTask -TaskName 'AutoLogin_SIAS' -TaskPath '\\'); running=($task.State -eq 'Running')} | ConvertTo-Json -Compress } else { @{exists=$false} | ConvertTo-Json -Compress }"
+    result = runner([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command],
+                    capture_output=True, text=True, encoding='utf-8', timeout=30)
+    if result.returncode:
+        raise RuntimeError('无法备份原任务，尚未修改安装。')
+    try:
+        snapshot = json.loads(result.stdout)
+        if not isinstance(snapshot, dict) or type(snapshot.get('exists')) is not bool:
+            raise ValueError('Invalid task snapshot')
+        if snapshot['exists'] and (not isinstance(snapshot.get('xml'), str) or
+                                   not snapshot['xml'].strip() or type(snapshot.get('running')) is not bool):
+            raise ValueError('Incomplete task snapshot')
+        return snapshot
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError('任务备份输出异常，尚未修改安装。') from exc
+
+
+def restore_task(snapshot, backup, runner=subprocess.run):
+    # The XML contains the original Enabled flag, principal and all conditions.
+    if snapshot['exists']:
+        xml_path = str(backup / 'task-before.xml').replace("'", "''")
+        command = "$ErrorActionPreference='Stop'; $xml=Get-Content -LiteralPath '" + xml_path + "' -Raw -Encoding UTF8; Register-ScheduledTask -TaskName 'AutoLogin_SIAS' -TaskPath '\\' -Xml $xml -Force | Out-Null"
+        if snapshot['running']:
+            command += "; Start-ScheduledTask -TaskName 'AutoLogin_SIAS' -TaskPath '\\'"
+    else:
+        command = "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { Unregister-ScheduledTask -InputObject $task -Confirm:$false }"
+    result = runner([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], timeout=30)
+    if result.returncode:
+        raise RuntimeError('原计划任务恢复失败。')
+
+
 def existing_directory():
-    command = "$ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { if (@($task.Actions).Count -ne 1) { throw 'Unsupported task actions' }; $id=$task.Principal.UserId; if ($id -notlike 'S-1-*') { $id=([Security.Principal.NTAccount]::new($id)).Translate([Security.Principal.SecurityIdentifier]).Value }; if ($id -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'Task belongs to another account' }; $task.Actions.Execute }"
-    result = subprocess.run([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], capture_output=True, text=True, timeout=30)
+    command = "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); $ErrorActionPreference='Stop'; $task=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq 'AutoLogin_SIAS'; if ($task) { if (@($task.Actions).Count -ne 1) { throw 'Unsupported task actions' }; $id=$task.Principal.UserId; if ($id -notlike 'S-1-*') { $id=([Security.Principal.NTAccount]::new($id)).Translate([Security.Principal.SecurityIdentifier]).Value }; if ($id -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'Task belongs to another account' }; $task.Actions.Execute }"
+    result = subprocess.run([powershell_path(), '-NoProfile', '-NonInteractive', '-Command', command], capture_output=True, text=True, encoding='utf-8', timeout=30)
     if result.returncode:
         raise RuntimeError('无法读取旧任务，请使用同一 Windows 账户的管理员权限运行。')
     value = result.stdout.strip().strip('"')

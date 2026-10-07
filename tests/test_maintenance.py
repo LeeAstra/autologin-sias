@@ -12,6 +12,11 @@ from sias_autologin.runtime.monitor import maintain, in_window
 from sias_autologin.platforms.windows import installer
 
 class MaintenanceTests(unittest.TestCase):
+    def setUp(self):
+        snapshot = patch.object(installer, 'snapshot_task', return_value={'exists': False})
+        snapshot.start()
+        self.addCleanup(snapshot.stop)
+
     def test_window_cross_midnight_and_end_exclusion(self):
         self.assertTrue(in_window(datetime(2026,1,1,0,10), time(23), time(1)))
         self.assertFalse(in_window(datetime(2026,1,1,3,15), time(2,55), time(3,15)))

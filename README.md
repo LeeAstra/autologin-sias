@@ -6,7 +6,7 @@
 
 **[下载一键安装包](https://github.com/LeeAstra/autologin-sias/releases/download/v1.2.0/AutoLogin_SIAS_Installer.exe)** · [版本说明](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0) · [使用与排障](docs/USAGE.md)
 
-**最新候选版 v1.3.0-rc.3：**两种维护模式、可选安装位置与备份迁移，源码采用认证核心／通用循环／Windows适配三层结构。[预发布下载](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0-rc.3) · [安装与升级](docs/releases/v1.3.0-rc.3.md)。夜间模式在配置窗口中检测并确认重登结果，持续模式与睡眠恢复等场景需按使用环境验收。[文档索引](docs/README.md) · [验证记录](docs/DEVELOPMENT.md)。下方四步教程对应v1.2.0稳定版。
+**最新候选版 v1.3.0-rc.4：**两种维护模式、可选安装位置与备份迁移，源码采用认证核心／通用循环／Windows适配三层结构。[预发布下载](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0-rc.4) · [安装与升级](docs/releases/v1.3.0-rc.4.md)。夜间模式在配置窗口中检测并确认重登结果，持续模式与睡眠恢复等场景需按使用环境验收。[文档索引](docs/README.md) · [验证记录](docs/DEVELOPMENT.md)。下方四步教程对应v1.2.0稳定版。
 
 夜间连续实验的源码、测试和构建说明独立放在 [tools/experiments](tools/experiments/README.md)，不会随安装包部署，也不会修改计划任务。
 

@@ -3,6 +3,8 @@
 No requests reach the real portal and no system tasks are registered.
 """
 import os
+import json
+from datetime import datetime, timedelta
 from pathlib import Path
 import shutil
 import subprocess
@@ -41,7 +43,7 @@ class PortalProxy(BaseHTTPRequestHandler):
         self.send_response(response['status'] if is_login else 200)
         self.end_headers()
         if is_info:
-            state = response['post'] if any(r[1].endswith('/ac_portal/login.php') for r in requests) else response['prior']
+            state = response['sequence'].pop(0) if response.get('sequence') else response['post'] if any(r[1].endswith('/ac_portal/login.php') for r in requests) else response['prior']
             if state == 'authenticated':
                 payload = b'{"success":true,"data":{"basic":{}}}'
             elif state == 'auth_required':
@@ -87,6 +89,20 @@ try:
             assert b'pwd=synthetic-password' not in posts[0][2], label
             print(f'Frozen EXE: {label} -> {result.returncode} OK')
 
+        # Online state must not rescue explicit credential rejection.
+        for body,expected in [(b'{"message":"login unsuccessful"}',5),
+                              (b'{"msg":"login failed: already online"}',5),
+                              (b'{"message":"login not successful"}',5),
+                              (b'{"success":false,"message":"login successful"}',5),
+                              (b'{"message":"login successful"}',0),
+                              (b'{"message":"login successful but error"}',8)]:
+            response.update(body=body,status=200,prior='authenticated',post='authenticated')
+            requests.clear()
+            result=subprocess.run([str(exe),'--validate-credentials'],cwd=work,env=env,timeout=60)
+            assert result.returncode==expected,(body,result.returncode,expected)
+            assert any(r[1].endswith('/ac_portal/login.php') for r in requests)
+        print('Frozen EXE: forced online validation rejects failure/ambiguous messages OK')
+
         for prior, post, expected in [('authenticated', 'unknown', 0), ('unknown', 'authenticated', 0),
                                       ('auth_required', 'auth_required', 8), ('auth_required', 'unknown', 8)]:
             response.update(body=b'{"success":true}', status=200, prior=prior, post=post)
@@ -106,6 +122,31 @@ try:
             form = parse_qs(next(r[2] for r in requests if r[1].endswith('/ac_portal/login.php')).decode())
             assert form['pwd'][0] == rc4_hex(password, form['auth_tag'][0])
         print('Frozen EXE: whitespace, quotes and backslashes preserved through encryption OK')
+
+        # A synthetic netsh executable advertises a fixture SSID; no Wi-Fi is changed.
+        csc=Path(os.environ['SystemRoot'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+        assert csc.is_file(), 'Windows C# compiler needed for the isolated netsh fixture'
+        source=work/'FixtureNetsh.cs'
+        source.write_text('class FixtureNetsh { static void Main() { System.Console.WriteLine("SSID : UESTC"); } }')
+        compiled=subprocess.run([str(csc),'/nologo','/target:exe','/out:'+str(work/'netsh.exe'),str(source)],capture_output=True,timeout=60)
+        assert compiled.returncode==0, compiled.stdout
+        for latest,submitted,confirmed in [('unknown',False,False),('authenticated',False,True),('auth_required',True,True)]:
+            response.update(body=b'{"success":true}',status=200,prior=latest,post='authenticated',sequence=['auth_required',latest])
+            requests.clear()
+            log=work/'auto_login_headless.log'
+            log.unlink(missing_ok=True)
+            begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
+            end=(datetime.now()+timedelta(seconds=8)).strftime('%H:%M:%S')
+            result=subprocess.run([str(exe),'--maintain','night','--window-start',begin,'--window-end',end],cwd=work,env=env,timeout=45)
+            assert result.returncode==0,(latest,result.returncode)
+            posts=[r for r in requests if r[1].endswith('/ac_portal/login.php')]
+            assert bool(posts)==submitted,(latest,requests)
+            events=[json.loads(line.split('Maintenance event: ',1)[1]) for line in log.read_text(encoding='utf-8').splitlines() if 'Maintenance event: ' in line]
+            login_event=next(e for e in events if e['event']=='login_result')
+            assert login_event['submitted'] is submitted and login_event['confirmed'] is confirmed, (latest,events)
+            assert events[0]['event']=='start' and events[-1]['event']=='end'
+        response.pop('sequence',None)
+        print('Frozen maintenance: latest unknown/authenticated/required submission policy and per-run evidence OK')
 
         # Exercise file deployment and the real child EXE. Only task registration
         # is replaced; its XML is covered separately by Test-TaskPreview.ps1.

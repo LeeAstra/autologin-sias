@@ -1,7 +1,7 @@
 """Read-only WLAN comparison; synthetic portal, never uses account credentials.
 Requires psutil (measurement only). Run from the repository root on Windows.
 """
-import argparse, ctypes, json, logging, subprocess, sys, time, threading
+import argparse, ctypes, json, logging, math, subprocess, sys, time, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import build_opener, ProxyHandler, HTTPCookieProcessor
 from http.cookiejar import CookieJar
@@ -23,7 +23,8 @@ def main():
     parser.add_argument('--scenario',choices=['online','logout'],default='logout')
     args=parser.parse_args()
     if sys.platform != "win32": parser.error("This WLAN measurement requires Windows")
-    if args.duration <= 0: parser.error("Duration must be positive")
+    if not math.isfinite(args.duration) or not 0 < args.duration < 86300:
+        parser.error("Duration must be finite, positive and shorter than one day")
     children=[]
     if args.backend=='baseline':
         code=subprocess.check_output(['git','-c',f'safe.directory={ROOT.as_posix()}',
@@ -33,24 +34,31 @@ def main():
         def run(command,**kwargs):
             child=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                    creationflags=kwargs.get('creationflags',0))
-            process=psutil.Process(child.pid)
-            peak=0
-            deadline=time.monotonic()+5
-            while child.poll() is None:
-                if time.monotonic()>deadline:
-                    child.kill();child.communicate()
-                    raise subprocess.TimeoutExpired(command,5)
-                try: peak=max(peak,process.memory_info().rss)
-                except psutil.Error: pass
-                time.sleep(.001)
-            stdout,stderr=child.communicate(timeout=5)
+            try:
+                stdout,stderr=child.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill();child.communicate()
+                raise
+            # Query kernel-retained peak memory after exit, avoiding a sampler
+            # that would artificially inflate the baseline parent's CPU time.
+            class Memory(ctypes.Structure):
+                _fields_=[('cb',ctypes.c_uint32),('faults',ctypes.c_uint32)]+[
+                    (name,ctypes.c_size_t) for name in ('peak_rss','rss','peak_pool','pool',
+                    'peak_nonpool','nonpool','pagefile','peak_pagefile','private')]
+            memory=Memory();memory.cb=ctypes.sizeof(memory)
+            read_memory=ctypes.WinDLL('psapi').GetProcessMemoryInfo
+            read_memory.argtypes=[ctypes.c_void_p,ctypes.POINTER(Memory),ctypes.c_uint32]
+            if not read_memory(child._handle,ctypes.byref(memory),ctypes.sizeof(memory)):
+                raise ctypes.WinError()
+            peak=memory.peak_rss
             # The Windows process handle remains valid after process termination.
             class FILETIME(ctypes.Structure):
                 _fields_=[('low',ctypes.c_uint32),('high',ctypes.c_uint32)]
             stamps=[FILETIME() for _ in range(4)]
             function=ctypes.WinDLL('kernel32').GetProcessTimes
             function.argtypes=[ctypes.c_void_p]+[ctypes.POINTER(FILETIME)]*4
-            function(child._handle,*[ctypes.byref(x) for x in stamps])
+            if not function(child._handle,*[ctypes.byref(x) for x in stamps]):
+                raise ctypes.WinError()
             cpu=sum((x.high<<32)+x.low for x in stamps[2:])/1e7
             children.append({'cpu_seconds':cpu,'peak_rss':peak})
             return SimpleNamespace(stdout=stdout,stderr=stderr,returncode=child.returncode)
@@ -92,6 +100,8 @@ def main():
         if time.monotonic()>=stop: return 'wrong_network'
         begin=time.perf_counter(); result=probe('UESTC');probes.append(time.perf_counter()-begin)
         peaks.append(process.memory_info().rss)
+        if result != 'target_network':
+            raise RuntimeError('Network conditions changed or measurement API failed; discard this run')
         return result
     def query(): return client.query_state()
     def login():

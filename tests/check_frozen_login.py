@@ -22,6 +22,7 @@ from credentials import write_env_file
 from auto_login_headless import rc4_hex
 
 requests = []
+login_times = []
 response = {'body': b'{"success":true}', 'status': 200, 'prior': 'auth_required', 'post': 'authenticated'}
 
 
@@ -39,6 +40,8 @@ class PortalProxy(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers['Content-Length']))
         requests.append(('POST', self.path, body, self.headers.get('Cookie')))
         is_login = self.path.endswith('/ac_portal/login.php')
+        if is_login:
+            login_times.append(datetime.now().astimezone())
         is_info = self.path.endswith('/homepage/info.php')
         self.send_response(response['status'] if is_login else 200)
         self.end_headers()
@@ -90,7 +93,9 @@ try:
             print(f'Frozen EXE: {label} -> {result.returncode} OK')
 
         # Online state must not rescue explicit credential rejection.
-        for body,expected in [(b'{"message":"login unsuccessful"}',5),
+        for body,expected in [(b'{"message":"login success: false"}',8),
+                              (b'{"message":"login successful? no"}',8),
+                              (b'{"message":"login unsuccessful"}',5),
                               (b'{"msg":"login failed: already online"}',5),
                               (b'{"message":"login not successful"}',5),
                               (b'{"success":false,"message":"login successful"}',5),
@@ -153,6 +158,42 @@ try:
             assert events[0]['event']=='start' and events[-1]['event']=='end'
         response.pop('sequence',None)
         print('Test-only frozen maintenance harness: latest unknown/authenticated/required submission policy and per-run evidence OK')
+
+        # Transient latest-state uncertainty must not consume credential cooldown.
+        response.update(body=b'{"success":true}',status=200,prior='authenticated',post='authenticated',
+                        sequence=['auth_required','unknown','auth_required','auth_required'])
+        requests.clear();log.unlink(missing_ok=True)
+        begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
+        end=(datetime.now()+timedelta(seconds=12)).strftime('%H:%M:%S')
+        result=subprocess.run([str(maintenance_exe),'--maintain','night','--window-start',begin,
+                               '--window-end',end],cwd=work,env=env,timeout=45)
+        assert result.returncode==0
+        events=[json.loads(line.split('Maintenance event: ',1)[1]) for line in
+                log.read_text(encoding='utf-8').splitlines() if 'Maintenance event: ' in line]
+        outcomes=[e for e in events if e['event']=='login_result']
+        assert [e['submitted'] for e in outcomes]==[False,True],events
+        gap=(datetime.fromisoformat(outcomes[1]['timestamp'])-
+             datetime.fromisoformat(outcomes[0]['timestamp'])).total_seconds()
+        assert 5<=gap<15, gap
+        assert len([r for r in requests if r[1].endswith('/ac_portal/login.php')])==1
+
+        # A real rejected submission still waits at least 15 seconds after completion.
+        response.update(body=b'{"success":false}',status=200,prior='auth_required',
+                        post='auth_required',sequence=[])
+        requests.clear();login_times.clear();log.unlink(missing_ok=True)
+        begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
+        end=(datetime.now()+timedelta(seconds=23)).strftime('%H:%M:%S')
+        result=subprocess.run([str(maintenance_exe),'--maintain','night','--window-start',begin,
+                               '--window-end',end],cwd=work,env=env,timeout=45)
+        assert result.returncode==0
+        events=[json.loads(line.split('Maintenance event: ',1)[1]) for line in
+                log.read_text(encoding='utf-8').splitlines() if 'Maintenance event: ' in line]
+        outcomes=[e for e in events if e['event']=='login_result']
+        assert len(outcomes)==len(login_times)==2,events
+        gap=(login_times[1]-datetime.fromisoformat(outcomes[0]['timestamp'])).total_seconds()
+        assert gap>=15,gap
+        print('Test-only frozen maintenance: skipped submission rechecks next cycle; rejected POST retains >=15s cooldown OK')
+
 
         # Exercise file deployment and the real child EXE. Only task registration
         # is replaced; its XML is covered separately by Test-TaskPreview.ps1.

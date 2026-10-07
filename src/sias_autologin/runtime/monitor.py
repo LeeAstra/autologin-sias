@@ -62,12 +62,14 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
                 if mode == 'night' and not in_window(clock(), start, end):
                     break
                 result = login()
-                code = result.code if isinstance(result, LoginResult) else result
-                event('login_result', exit_code=code,
-                      submitted=result.submitted if isinstance(result, LoginResult) else None,
-                      confirmed=result.confirmed if isinstance(result, LoginResult) else None)
-                logger.info('Maintenance login result: exit_code=%s', code)
-                next_login = monotonic() + retry
+                if not isinstance(result, LoginResult):
+                    raise TypeError('Maintenance login callback must return LoginResult')
+                event('login_result', exit_code=result.code,
+                      submitted=result.submitted, confirmed=result.confirmed)
+                logger.info('Maintenance login result: exit_code=%s', result.code)
+                # Skipping a submission keeps the ordinary polling interval.
+                if result.submitted:
+                    next_login = monotonic() + retry
             sleep(interval)
         logger.info('Maintenance stopped: outside night window')
         return 0

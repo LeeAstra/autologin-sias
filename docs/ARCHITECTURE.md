@@ -44,3 +44,5 @@ Windows 构建使用 `scripts/build/Build-Installer.ps1`，任务脚本在 `scri
 安装器的 InstallationLock 在旧状态读取前取得全局锁；同线程嵌套安装复用所有权，跨线程或跨进程竞争拒绝。只读版本及载荷检查无需锁。
 
 Windows Wi-Fi 使用 `platforms/windows/network.py` 中的 WLAN API。函数每次重新打开会话、枚举接口并查询当前连接；所有 API 内存与句柄在 finally 中释放。固定32位枚举/DWORD和16位 WCHAR保证 ABI 一致。System32 限定 DLL 搜索；缓存仅包含函数绑定，不包含连接状态。断开为 wrong_network，服务、权限、查询错误或连接过渡为 network_unverified；任一网卡明确连接 UESTC 可提供目标网络证据。
+
+维护循环的login回调必须返回LoginResult，真实提交记录决定冷却；未知跳过不消耗重试预算。整数返回值只保留在认证核心和单次CLI，由Windows适配包装；维护层不再猜测整数结果是否提交。文字响应成功使用完整格式白名单，结构化结果仍优先。

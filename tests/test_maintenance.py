@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
-from sias_autologin.runtime.monitor import maintain, in_window
+from sias_autologin.runtime.monitor import maintain, in_window, LoginResult
 from sias_autologin.platforms.windows import installer
 
 class MaintenanceTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class MaintenanceTests(unittest.TestCase):
         calls = []
         def sleep(seconds): tick[0] += timedelta(seconds=seconds)
         result = maintain(mode='night', network=lambda:'target_network', query=lambda:(next(states),'synthetic'),
-                          login=lambda:calls.append(tick[0]) or 7, logger=logging.getLogger('test'),
+                          login=lambda:calls.append(tick[0]) or LoginResult(7,True,False), logger=logging.getLogger('test'),
                           clock=lambda:tick[0], monotonic=lambda:tick[0].timestamp(), sleep=sleep)
         self.assertEqual(result,0)
         self.assertEqual(len(calls),1)
@@ -51,13 +51,24 @@ class MaintenanceTests(unittest.TestCase):
                      clock=lambda:tick[0],sleep=sleep)
         self.assertEqual(sum('Maintenance state:' in line for line in records.output),1)
 
+    def test_unsubmitted_attempt_is_rechecked_after_five_seconds(self):
+        tick=[datetime(2026,1,1,3,14,40)]; calls=[]
+        def sleep(seconds): tick[0]+=timedelta(seconds=seconds)
+        def login():
+            calls.append(tick[0])
+            return LoginResult(8,False,False)
+        maintain(mode='night',network=lambda:'target_network',query=lambda:('auth_required','fixture'),
+                 login=login,logger=logging.getLogger('unsubmitted'),clock=lambda:tick[0],
+                 monotonic=lambda:tick[0].timestamp(),sleep=sleep)
+        self.assertEqual([x.second for x in calls],[40,45,50,55])
+
     def test_failed_authentication_waits_at_least_fifteen_seconds_after_completion(self):
         tick=[datetime(2026,1,1,3,14)]
         starts=[]; ends=[]
         def sleep(seconds): tick[0]+=timedelta(seconds=seconds)
         def login():
             starts.append(tick[0]); tick[0]+=timedelta(seconds=2);ends.append(tick[0])
-            return 7
+            return LoginResult(7,True,False)
         maintain(mode='night',network=lambda:'target_network',query=lambda:('auth_required','fixture'),
                  login=login,logger=logging.getLogger('retry'),clock=lambda:tick[0],
                  monotonic=lambda:tick[0].timestamp(),sleep=sleep)

@@ -10,6 +10,10 @@ root = Path(__file__).resolve().parents[1]
 dist = root / 'packaging' / 'dist'
 bundle = dist / 'AutoLogin_SIAS_Installer.exe'
 archive = CArchiveReader(str(bundle))
+for artifact in (bundle, dist/'AutoLogin_SIAS_Headless.exe'):
+    product=CArchiveReader(str(artifact))
+    assert not any('fixture_wlan' in entry.lower() or 'WlanPolicyFixture' in entry
+                   for entry in product.toc), 'Test-only WLAN hook entered product artifact'
 for name, source in {
     'AutoLogin_SIAS_Headless.exe': dist / 'AutoLogin_SIAS_Headless.exe',
     'Install-AutoLoginTask.ps1': root / 'scripts' / 'windows' / 'Install-AutoLoginTask.ps1',

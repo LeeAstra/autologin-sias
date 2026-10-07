@@ -10,7 +10,7 @@ python tools/experiments/resource-benchmark/measure.py --backend baseline --mode
 python tools/experiments/resource-benchmark/measure.py --backend native --mode night --scenario logout --duration 60
 ```
 
-持续模式改为 `--mode continuous`，至少运行90秒。默认间隔严格沿用5秒/30秒，logout在测量中点模拟认证失效。实际WLAN查询＋内存内模拟认证门户，不读取凭据、不真实登出、不发送网络认证请求、不修改任务。state_queries/login_requests 是模拟回调次数，不能写作真实 HTTP 请求次数。恢复时间包含轮询等待与登录保护查询，模拟认证无HTTP/服务端耗时。
+持续模式改为 `--mode continuous`，至少运行90秒。默认间隔严格沿用5秒/30秒，logout在测量中点模拟认证失效。实际WLAN查询＋本机loopback HTTP模拟认证门户，不读取凭据、不真实登出、只向127.0.0.1发送模拟HTTP请求，不发送校园网认证请求、不修改任务。state_queries/login_requests/http_requests 由loopback服务实际收到的HTTP请求计数。恢复时间包含轮询等待与登录保护查询，包含本机HTTP往返，不能代表真实门户服务端耗时。
 
 baseline 从固定提交8809b05读取旧检测函数，主程序不包含备用netsh。CPU父进程与子进程分别测量，RSS同样分列，不能将峰值相加当作同步总峰值；计数排除Git读取与预热。在线与登出场景应分别比较，保持网络与负载条件一致，长时间建议600秒或以上。日志只输出一条汇总，无逐次在线日志。CPU为Windows累计计时，短测量的0表示低于计时分辨率。
 

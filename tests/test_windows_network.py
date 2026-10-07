@@ -2,6 +2,7 @@ import ctypes as C
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from sias_autologin.platforms.windows import network as n
 
@@ -48,6 +49,19 @@ class WindowsNetworkTests(unittest.TestCase):
     def test_disconnected(self): self.check([(4,b'')],'wrong_network')
     def test_no_interfaces(self): self.check([],'wrong_network')
     def test_multi_adapter(self): self.check([(1,b'Other'),(1,b'UESTC')],'target_network')
+    def test_target_with_transitioning_other_adapter(self):
+        self.check([(5,b''),(1,b'UESTC')],'target_network')
+    def test_other_with_transitioning_adapter_is_unknown(self):
+        self.check([(1,b'Other'),(5,b'')],'network_unverified')
+    def test_loader_failure_is_unknown(self):
+        with patch.object(n.os,'name','nt'), patch.object(n,'_load_api',side_effect=OSError('denied')):
+            self.assertEqual(n.target_wifi('UESTC'),'network_unverified')
+    def test_fresh_observations(self):
+        with patch.object(n.os,'name','nt'), patch.object(n,'_load_api',
+                side_effect=[FakeAPI([(1,b'UESTC')]),FakeAPI([(4,b'')]),FakeAPI([(1,b'Other')])]):
+            self.assertEqual(n.target_wifi('UESTC'),'target_network')
+            self.assertEqual(n.target_wifi('UESTC'),'wrong_network')
+            self.assertEqual(n.target_wifi('UESTC'),'wrong_network')
     def test_transition(self): self.check([(5,b'')],'network_unverified')
     def test_service_unavailable(self): self.check([(1,b'UESTC')],'network_unverified',error=1062)
     def test_denied(self): self.check([(1,b'UESTC')],'network_unverified',error=5)

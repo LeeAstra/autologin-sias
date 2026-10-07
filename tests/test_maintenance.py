@@ -34,10 +34,11 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(tick[0].time(),time(3,15))
 
     def test_disconnect_before_login_prevents_authentication(self):
-        networks=iter(['target_network','wrong_network','wrong_network'])
+        networks=iter(['target_network','wrong_network'])
         calls=[]
         maintain(mode='continuous',network=lambda:next(networks),query=lambda:('auth_required','synthetic'),
-                 login=lambda:calls.append(1),logger=logging.getLogger('test'),sleep=lambda _:None)
+                 login=lambda:calls.append(1),logger=logging.getLogger('test'),
+                 sleep=lambda _:self.fail('A verified departure must exit immediately'))
         self.assertEqual(calls,[])
 
     def test_outside_window_does_not_query_network(self):

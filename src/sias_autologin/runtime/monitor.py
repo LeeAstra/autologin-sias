@@ -50,7 +50,12 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
             if state == 'auth_required' and monotonic() >= next_login:
                 if mode == 'night' and not in_window(clock(), start, end):
                     break
-                if network() != 'target_network':
+                latest_network = network()
+                if latest_network == 'wrong_network':
+                    reason = 'left_target_wifi'
+                    logger.info('Maintenance stopped: left target Wi-Fi')
+                    return 0
+                if latest_network != 'target_network':
                     sleep(interval)
                     continue
                 # The second network probe may itself cross the end boundary.

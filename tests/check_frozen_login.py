@@ -123,13 +123,19 @@ try:
             assert form['pwd'][0] == rc4_hex(password, form['auth_tag'][0])
         print('Frozen EXE: whitespace, quotes and backslashes preserved through encryption OK')
 
-        # A synthetic netsh executable advertises a fixture SSID; no Wi-Fi is changed.
-        csc=Path(os.environ['SystemRoot'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-        assert csc.is_file(), 'Windows C# compiler needed for the isolated netsh fixture'
-        source=work/'FixtureNetsh.cs'
-        source.write_text('class FixtureNetsh { static void Main() { System.Console.WriteLine("SSID : UESTC"); } }')
-        compiled=subprocess.run([str(csc),'/nologo','/target:exe','/out:'+str(work/'netsh.exe'),str(source)],capture_output=True,timeout=60)
-        assert compiled.returncode==0, compiled.stdout
+        # Test-only frozen harness substitutes the WLAN observation. Production
+        # artifacts never contain this hook or any environment-driven Wi-Fi bypass.
+        hook=work/'fixture_wlan.py'
+        hook.write_text("from sias_autologin.platforms.windows import runner\nrunner.target_wifi=lambda ssid: 'target_network'\n")
+        spec=(root/'packaging/auto_login_headless.spec').read_text()
+        spec=spec.replace("'../src/auto_login_headless.py'",repr(str(root/'src/auto_login_headless.py')))
+        spec=spec.replace("'../src'",repr(str(root/'src')))
+        spec=spec.replace('runtime_hooks=[]','runtime_hooks=['+repr(str(hook))+']')
+        spec=spec.replace("name='AutoLogin_SIAS_Headless'","name='WlanPolicyFixture'")
+        fixture_spec=work/'fixture.spec'; fixture_spec.write_text(spec)
+        subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--distpath',str(work),
+                        '--workpath',str(work/'build'),str(fixture_spec)],check=True,timeout=180)
+        maintenance_exe=work/'WlanPolicyFixture.exe'
         for latest,submitted,confirmed in [('unknown',False,False),('authenticated',False,True),('auth_required',True,True)]:
             response.update(body=b'{"success":true}',status=200,prior=latest,post='authenticated',sequence=['auth_required',latest])
             requests.clear()
@@ -137,7 +143,7 @@ try:
             log.unlink(missing_ok=True)
             begin=(datetime.now()-timedelta(minutes=1)).strftime('%H:%M:%S')
             end=(datetime.now()+timedelta(seconds=8)).strftime('%H:%M:%S')
-            result=subprocess.run([str(exe),'--maintain','night','--window-start',begin,'--window-end',end],cwd=work,env=env,timeout=45)
+            result=subprocess.run([str(maintenance_exe),'--maintain','night','--window-start',begin,'--window-end',end],cwd=work,env=env,timeout=45)
             assert result.returncode==0,(latest,result.returncode)
             posts=[r for r in requests if r[1].endswith('/ac_portal/login.php')]
             assert bool(posts)==submitted,(latest,requests)
@@ -146,7 +152,7 @@ try:
             assert login_event['submitted'] is submitted and login_event['confirmed'] is confirmed, (latest,events)
             assert events[0]['event']=='start' and events[-1]['event']=='end'
         response.pop('sequence',None)
-        print('Frozen maintenance: latest unknown/authenticated/required submission policy and per-run evidence OK')
+        print('Test-only frozen maintenance harness: latest unknown/authenticated/required submission policy and per-run evidence OK')
 
         # Exercise file deployment and the real child EXE. Only task registration
         # is replaced; its XML is covered separately by Test-TaskPreview.ps1.

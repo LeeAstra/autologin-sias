@@ -15,6 +15,36 @@ _STOP = """
         if ((Get-Date) -gt $deadline) { throw 'Task did not stop' }
         Start-Sleep -Milliseconds 200
     }
+    # A frozen bootloader child may outlive the scheduler's tracked parent.
+    # Only stop this account's processes at the verified task action path.
+    $exe = $task.Actions[0].Execute
+    if ([IO.Path]::GetFileName($exe) -ieq 'AutoLogin_SIAS_Headless.exe') {
+        $owner = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $expected = [IO.Path]::GetFullPath($exe)
+        if (Test-Path -LiteralPath $exe) { $expected = [IO.Path]::GetFullPath((Get-Item -LiteralPath $exe).FullName) }
+        foreach ($entry in @(Get-CimInstance Win32_Process -Filter "Name='AutoLogin_SIAS_Headless.exe'")) {
+            if (-not $entry.ExecutablePath -or [IO.Path]::GetFullPath($entry.ExecutablePath) -ine $expected) { continue }
+            $process = $null
+            try {
+                try { $process = [Diagnostics.Process]::GetProcessById($entry.ProcessId) }
+                catch [ArgumentException] { continue }
+                # Hold the process handle while checking identity and stopping it.
+                $null = $process.Handle
+                if ($process.HasExited) { continue }
+                if ([IO.Path]::GetFullPath($process.MainModule.FileName) -ine $expected) { continue }
+                $identity = Invoke-CimMethod -InputObject $entry -MethodName GetOwnerSid
+                if ($identity.ReturnValue -ne 0 -or $identity.Sid -ne $owner) {
+                    throw 'Cannot safely confirm task process ownership'
+                }
+                if (-not $process.HasExited) { $process.Kill() }
+                if (-not $process.WaitForExit(5000)) { throw 'Task process did not exit' }
+            } catch {
+                if (-not $process -or -not $process.HasExited) { throw }
+            } finally {
+                if ($process) { $process.Dispose() }
+            }
+        }
+    }
 """
 _START = """
     Enable-ScheduledTask -InputObject $task | Out-Null

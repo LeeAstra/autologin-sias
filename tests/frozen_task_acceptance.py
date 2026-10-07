@@ -60,6 +60,7 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
         return ps("Export-ScheduledTask -TaskPath '\\' -TaskName '" + name + "'").strip()
 
     def remove_task():
+        tasks.control_task('stop',runner)
         ps("$t=Get-ScheduledTask -TaskPath '\\' | Where-Object TaskName -eq '" + name + "'; "
            "if ($t) { Stop-ScheduledTask -InputObject $t; "
            "Unregister-ScheduledTask -InputObject $t -Confirm:$false }")
@@ -92,11 +93,17 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
                 command=ET.fromstring(xml).findtext('./t:Actions/t:Exec/t:Command',namespaces={'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'})
                 assert command and os.path.samefile(command,target / deployment.INSTALL_FILES[0]), command
                 assert '--maintain ' + mode in xml
+                assert unrelated.poll() is None, 'Stop killed an unrelated same-name EXE at another path'
                 print(f'PASS: isolated frozen scheduled run; mode={mode}; target={target.name}')
                 return
             time.sleep(.2)
-        raise AssertionError('No fresh scheduled maintenance evidence for ' + str(target))
+        raise AssertionError('No fresh scheduled maintenance evidence for ' + str(target) + '; events=' + repr(events(target)))
 
+    unrelated_dir=area/'unrelated'; unrelated_dir.mkdir()
+    unrelated_exe=unrelated_dir/deployment.INSTALL_FILES[0]
+    shutil.copy2(fixture_exe,unrelated_exe)
+    unrelated=subprocess.Popen([str(unrelated_exe),'--setup'],cwd=unrelated_dir,
+                               stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     profile=patch.dict(os.environ,{'LOCALAPPDATA':str(area/'profile')})
     profile.start()
     try:
@@ -149,4 +156,6 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
             remove_task()
         finally:
             profile.stop()
+            unrelated.communicate(input=b'',timeout=15)
+    print('PASS: same-name process at unrelated path survived task stops')
     print('PASS: real temporary scheduled installation matrix; production task untouched')

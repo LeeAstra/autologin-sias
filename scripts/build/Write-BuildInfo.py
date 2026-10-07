@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 import PyInstaller
+from PyInstaller.archive.readers import CArchiveReader
 
 root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / 'src'))
@@ -23,10 +24,13 @@ inputs = sorted([*root.glob('src/**/*.py'), *root.glob('packaging/*.spec'),
 fingerprint = hashlib.sha256()
 for path in inputs:
     fingerprint.update(path.relative_to(root).as_posix().encode() + b'\0')
-    fingerprint.update(hashlib.sha256(path.read_bytes()).digest())
+    fingerprint.update(hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).digest())
 artifacts = {}
 for name in ('AutoLogin_SIAS_Headless.exe', 'AutoLogin_SIAS_Installer.exe'):
     path = root / 'packaging/dist' / name
+    compiled_version = CArchiveReader(str(path)).open_embedded_archive('PYZ.pyz').extract('sias_autologin.version')
+    if VERSION not in compiled_version.co_consts:
+        raise RuntimeError('Compiled artifact version differs from source: ' + name)
     artifacts[name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                        'bytes': path.stat().st_size}
 info = {'schema': 'autologin-build-v1', 'version': VERSION, 'commit': git('rev-parse', 'HEAD'),

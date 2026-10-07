@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import time
 import uuid
+import xml.etree.ElementTree as ET
 
 from sias_autologin.platforms.windows import deployment, tasks
 from sias_autologin.runtime.monitor import in_window
@@ -87,7 +88,8 @@ def check_isolated_installations(root, work, fixture_exe, configure_response):
                         continue
                     assert any(e.get('state') == 'authenticated' for e in run)
                 xml = snapshot_xml()
-                assert str(target / deployment.INSTALL_FILES[0]) in xml
+                command=ET.fromstring(xml).findtext('./t:Actions/t:Exec/t:Command',namespaces={'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'})
+                assert command and os.path.samefile(command,target / deployment.INSTALL_FILES[0]), command
                 assert '--maintain ' + mode in xml
                 print(f'PASS: isolated frozen scheduled run; mode={mode}; target={target.name}')
                 return

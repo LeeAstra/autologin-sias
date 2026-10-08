@@ -118,7 +118,7 @@ $info = Get-ScheduledTaskInfo -InputObject $task
 
 ## 反馈问题
 
-在[GitHub Issues](https://github.com/LeeAstra/autologin-sias/issues/new)粘贴下面模板。先删除密码、账号、Cookie、令牌、MAC/IP 等敏感内容及不必要的个人路径；**不要上传真实 `.env`、凭据备份、整个安装目录或原始抓包**。
+在[GitHub Issues](https://github.com/LeeAstra/autologin-sias/issues/new/choose)选择“故障报告”填写，或粘贴下面模板。敏感安全问题先按[安全反馈说明](../SECURITY.md)确认渠道，不在公开反馈中披露漏洞细节。先删除密码、账号、Cookie、令牌、MAC/IP 等敏感内容及不必要的个人路径；**不要上传真实 `.env`、凭据备份、整个安装目录或原始抓包**。
 
 ```text
 版本及文件：v1.3.0 / 完整安装器或后台 EXE

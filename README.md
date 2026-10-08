@@ -58,4 +58,6 @@
 - [贡献与发布](CONTRIBUTING.md)：提交流程；[维护与发布指南](docs/MAINTENANCE.md)说明来源与校验。
 - [历史与实验](docs/history/README.md)：旧版说明、独立实验、最终验收及历史测量。
 
+普通故障或文档建议请使用[反馈模板](https://github.com/LeeAstra/autologin-sias/issues/new/choose)，敏感问题先看[安全反馈说明](SECURITY.md)。
+
 凭据保存在本机 `.env`，不是加密存储。不要上传真实配置、密码、Cookie 或整个安装目录。[配置与隐私说明](docs/USAGE.md#配置与隐私)。项目采用 [MIT 许可证](LICENSE)。

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from credentials import load_env_file
+from sias_autologin.platforms.windows import deployment
 
 spec = importlib.util.spec_from_file_location('installer', Path(__file__).resolve().parents[1] / 'src/install_autologin.py')
 installer = importlib.util.module_from_spec(spec)
@@ -32,9 +33,9 @@ class InstallTests(unittest.TestCase):
             return SimpleNamespace(returncode=0)
         with patch.dict(os.environ, {'WLAN_PWD': 'stale', 'SystemRoot': 'C:\\Windows'}):
             installer.install(self.payload, self.target, 'user', 'secret', run)
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][0][1], '--validate-credentials')
-        self.assertNotIn('WLAN_PWD', calls[0][1]['env'])
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[1][0][1], '--validate-credentials')
+        self.assertNotIn('WLAN_PWD', calls[1][1]['env'])
         self.assertNotIn('secret', str(calls))
         self.assertEqual(load_env_file(self.target / '.env'), {'WLAN_USER': 'user', 'WLAN_PWD': 'secret'})
 
@@ -47,7 +48,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), b'old')
 
     def test_task_failure_keeps_installed_payload(self):
-        results = iter([0, 1])
+        results = iter([0, 0, 1])
         with patch.dict(os.environ, {'SystemRoot': 'C:\\Windows'}), self.assertRaises(RuntimeError):
             installer.install(self.payload, self.target, 'user', 'secret', lambda *a, **k: SimpleNamespace(returncode=next(results)))
         self.assertTrue((self.target / '.env').exists())
@@ -61,7 +62,9 @@ class InstallTests(unittest.TestCase):
     def test_interrupt_during_login_restores_old_config(self):
         (self.target / '.env').write_bytes(b'old')
         def interrupted(*args, **kwargs):
-            raise KeyboardInterrupt()
+            if '--validate-credentials' in args[0]:
+                raise KeyboardInterrupt()
+            return SimpleNamespace(returncode=0)
         with self.assertRaises(KeyboardInterrupt):
             installer.install(self.payload, self.target, 'user', 'secret', interrupted)
         self.assertEqual((self.target / '.env').read_bytes(), b'old')
@@ -70,8 +73,8 @@ class InstallTests(unittest.TestCase):
     def test_locked_target_is_not_truncated(self):
         target = self.target / 'existing.exe'
         target.write_bytes(b'original')
-        with patch.object(installer.os, 'replace', side_effect=PermissionError('locked')), \
-             patch.object(installer.time, 'sleep'), self.assertRaises(PermissionError):
+        with patch.object(deployment.os, 'replace', side_effect=PermissionError('locked')), \
+             patch.object(deployment.time, 'sleep'), self.assertRaises(PermissionError):
             installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
         self.assertEqual(target.read_bytes(), b'original')
         self.assertEqual(list(self.target.iterdir()), [target])
@@ -86,7 +89,7 @@ class InstallTests(unittest.TestCase):
             if len(attempts) == 1:
                 raise PermissionError('locked')
             return replace(source, destination)
-        with patch.object(installer.os, 'replace', side_effect=temporarily_locked), patch.object(installer.time, 'sleep'):
+        with patch.object(deployment.os, 'replace', side_effect=temporarily_locked), patch.object(deployment.time, 'sleep'):
             installer.replace_file(target, lambda staged: staged.write_bytes(b'new'))
         self.assertEqual(target.read_bytes(), b'new')
         self.assertEqual(len(attempts), 2)

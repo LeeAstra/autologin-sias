@@ -32,6 +32,28 @@ class ReviewRegressionTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertIs(response_indicates_success(json.dumps(message).encode())[0],expected)
 
+    def test_success_text_requires_complete_known_format(self):
+        for text in ('login success: false','login successful? no','login successful? yes',
+                     'login successful: false','login success = false','prefix login successful',
+                     'login successful suffix','login successful; denied','登录成功？否'):
+            for body in (text.encode(),json.dumps({'message':text}).encode()):
+                with self.subTest(text=text,body=body):
+                    self.assertIsNone(response_indicates_success(body)[0])
+        for text in ('login success','login successful','login ok','logon success','认证成功'):
+            self.assertIs(response_indicates_success(text.encode())[0],True)
+
+    def test_ambiguous_success_cannot_validate_online_credentials(self):
+        for text in ('login success: false','login successful? no'):
+            client=FakeClient(['authenticated','authenticated'])
+            original=client.request
+            def request(opener,url,*,data=None):
+                original(opener,url,data=data)
+                return 200,json.dumps({'message':text}).encode() if url==client.settings.login_url else b'1'
+            client.request=request
+            self.assertEqual(ensure_authenticated('synthetic','synthetic',client=client,
+                             validate_credentials=True),8)
+            self.assertEqual(len(client.calls),3)
+
     def test_javascript_and_duplicate_structured_fields_do_not_use_success_text(self):
         for body,expected in [(b"{'result':false,'msg':'logon success'}",False),
                               (b"{'success':'false','msg':'logon success'}",False),
@@ -91,7 +113,10 @@ class ReviewRegressionTests(unittest.TestCase):
             with self.subTest(latest=latest):
                 clock=[datetime(2026,1,1,3,14,59)]; client=FakeClient([latest,'authenticated'])
                 def login():
-                    return ensure_authenticated('synthetic','synthetic',client=client,require_auth_required=True)
+                    submitted=[]
+                    code=ensure_authenticated('synthetic','synthetic',client=client,require_auth_required=True,
+                                              on_submit=lambda:submitted.append(True))
+                    return LoginResult(code,bool(submitted),code==0)
                 maintain(mode='night',network=lambda:'target_network',query=lambda:('auth_required','fixture'),login=login,
                          logger=logging.getLogger('test'),clock=lambda:clock[0],sleep=lambda seconds:clock.__setitem__(0,clock[0]+timedelta(seconds=seconds)))
                 self.assertEqual(len(client.calls),count)

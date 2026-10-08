@@ -38,7 +38,7 @@ class LoginTests(unittest.TestCase):
         for body, expected in [(b"{'success':false,'msg':'denied'}", 5),
                                (b"{'success':true,'msg':'logon success'}", 0)]:
             with self.subTest(body=body), patch.dict(os.environ, {'WLAN_USER':'demo','WLAN_PWD':'demo'}), \
-                 patch.object(login, 'load_env_file', return_value={}), \
+                 patch.object(login, 'load_env_file', return_value={'WLAN_USER':'demo','WLAN_PWD':'demo'}), \
                  patch.object(login, 'query_authentication_state', return_value=('authenticated','test')), \
                  patch.object(login, 'request', side_effect=[(200,b''),(200,body),(200,b'0')]) as request:
                 self.assertEqual(login.run_login(validate_credentials=True), expected)

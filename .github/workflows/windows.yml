@@ -19,8 +19,10 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_portable_core.py' -v
       - run: python -m unittest discover -s tests -p 'test_maintenance.py' -v
       - run: python -m unittest discover -s tests -p 'test_login.py' -v
+      - run: python -m unittest discover -s tests -p 'test_setup.py' -v
       - run: python -m unittest discover -s tests -p 'test_credentials.py' -v
       - run: python -m unittest discover -s tests -p 'test_review_regressions.py' -v
+      - run: python -m unittest discover -s tests -p 'test_windows_network.py' -v
   test-and-build:
     runs-on: windows-latest
     steps:
@@ -37,10 +39,14 @@ jobs:
       - shell: powershell
         run: .\tests\Test-AcceptanceEvidence.ps1
       - shell: powershell
+        run: .\tests\Test-AcceptanceStatus.ps1
+      - shell: powershell
         run: .\scripts\Build-Installer.ps1
+      - run: python tests/check_task_commands.py
       - run: python tests/check_task_recovery.py
       - run: python tests/check_installer_lock.py
       - run: python tests/check_bundle.py
+      - run: python tests/check_live_wlan.py
       - run: python tests/check_frozen_login.py
       - uses: actions/upload-artifact@v7
         with:
@@ -49,3 +55,4 @@ jobs:
             packaging/dist/AutoLogin_SIAS_Installer.exe
             packaging/dist/AutoLogin_SIAS_Headless.exe
             packaging/dist/SHA256SUMS.txt
+            packaging/dist/BUILD-INFO.json

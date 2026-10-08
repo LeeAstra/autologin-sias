@@ -1,5 +1,7 @@
 """Read-only artifact checks and frozen CLI smoke tests; never install a task."""
 import os
+import hashlib
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 import subprocess
@@ -8,8 +10,20 @@ from PyInstaller.archive.readers import CArchiveReader
 
 root = Path(__file__).resolve().parents[1]
 dist = root / 'packaging' / 'dist'
+info=json.loads((dist/'BUILD-INFO.json').read_text(encoding='utf-8'))
+head=subprocess.check_output(['git','-c','safe.directory='+root.as_posix(),'rev-parse','HEAD'],cwd=root,text=True).strip()
+assert info['commit']==head and not info['source_dirty'], 'Artifact source is not the clean tested commit'
+sums={line.split('  ',1)[1]:line.split('  ',1)[0] for line in (dist/'SHA256SUMS.txt').read_text().splitlines()}
+for name, recorded in info['artifacts'].items():
+    actual=hashlib.sha256((dist/name).read_bytes()).hexdigest()
+    assert recorded['sha256']==sums[name]==actual, 'Artifact checksum mismatch: '+name
+print('Clean build provenance and SHA256 verified: '+head)
 bundle = dist / 'AutoLogin_SIAS_Installer.exe'
 archive = CArchiveReader(str(bundle))
+for artifact in (bundle, dist/'AutoLogin_SIAS_Headless.exe'):
+    product=CArchiveReader(str(artifact))
+    assert not any('fixture_wlan' in entry.lower() or 'WlanPolicyFixture' in entry
+                   for entry in product.toc), 'Test-only WLAN hook entered product artifact'
 for name, source in {
     'AutoLogin_SIAS_Headless.exe': dist / 'AutoLogin_SIAS_Headless.exe',
     'Install-AutoLoginTask.ps1': root / 'scripts' / 'windows' / 'Install-AutoLoginTask.ps1',

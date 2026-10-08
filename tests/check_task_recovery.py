@@ -21,7 +21,7 @@ def ps(command):
     return result
 try:
     for enabled in (True,False):
-        ps("$ErrorActionPreference='Stop'; $a=New-ScheduledTaskAction -Execute '"+installer.powershell_path()+"' -Argument '-NoProfile -NonInteractive -Command exit'; $p=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType S4U; Register-ScheduledTask -TaskName '"+name+"' -Action $a -Principal $p -Force | Out-Null" + ("; Disable-ScheduledTask -TaskName '"+name+"' | Out-Null" if not enabled else ''))
+        ps("$ErrorActionPreference='Stop'; $a=New-ScheduledTaskAction -Execute '"+str(Path(__file__).resolve().parents[1]/'packaging/dist/AutoLogin_SIAS_Headless.exe')+"' -Argument '--maintain night'; $p=New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) -LogonType S4U; Register-ScheduledTask -TaskName '"+name+"' -Action $a -Principal $p -Force | Out-Null" + ("; Disable-ScheduledTask -TaskName '"+name+"' | Out-Null" if not enabled else ''))
         for same in (True,False):
             with tempfile.TemporaryDirectory() as folder:
                 root=Path(folder); old=root/'old'; old.mkdir(); payload=root/'payload'; payload.mkdir()
@@ -33,6 +33,8 @@ try:
                 def runner(args,**kwargs):
                     if '--validate-credentials' in args:
                         return subprocess.CompletedProcess(args,0)
+                    if '-ExportOnly' in args:
+                        return subprocess.run(args + ['-TaskName',name],**kwargs)
                     if '-File' in args:
                         # Simulate a registration that changed the task, then failed verification.
                         ps("$ErrorActionPreference='Stop'; Enable-ScheduledTask -TaskName '"+name+"' | Out-Null")

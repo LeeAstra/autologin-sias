@@ -29,19 +29,28 @@ def rc4_hex(plain_text: str, key_text: str) -> str:
     return "".join(output)
 
 
+# Accept only complete success formats; searching a success prefix is unsafe.
+_SUCCESS_MESSAGE = re.compile(
+    r"(?:login|logon|authentication) (?:success|successful|succeeded|ok)"
+    r"|successfully (?:logged in|authenticated)|登录成功|认证成功"
+)
+_NEGATED_MESSAGE = re.compile(
+    r"unsuccessful|(?:未|不|没有|并非).{0,6}(?:成功|认证|登录)"
+    r"|\b(?:not|never|no)\s+(?:\w+\s+){0,2}(?:success(?:ful)?|ok|authenticated|logged\s+in)\b"
+)
+_FAILED_MESSAGE = re.compile(
+    r"\b(?:fail(?:ed|ure)?|error|invalid|wrong|denied|rejected)\b|失败|错误|拒绝"
+)
+
 def _message_result(text):
-    lowered = text.lower()
-    # Match words/phrases rather than the substring in "unsuccessful".
-    negative = bool(re.search(r"\b(?:unsuccessful|fail(?:ed|ure)?|error|invalid|wrong|denied|rejected)\b|失败|错误|拒绝|(?:未|不|没有|并非).{0,6}(?:成功|认证|登录)|\b(?:not|never|no)\s+(?:\w+\s+){0,2}(?:success(?:ful)?|ok|authenticated|logged\s+in)\b", lowered))
-    negation = bool(re.search(r"unsuccessful|(?:未|不|没有|并非).{0,6}(?:成功|认证|登录)|\b(?:not|never|no)\s+(?:\w+\s+){0,2}(?:success(?:ful)?|ok|authenticated|logged\s+in)\b", lowered))
-    positive = bool(re.search(r"\b(?:login|logon|authentication)\s+(?:success(?:ful)?|succeeded|ok)\b|\bsuccessfully\s+(?:logged\s+in|authenticated)\b|登录成功|认证成功", lowered))
-    if negation:
+    normalized = " ".join(text.casefold().split())
+    if _SUCCESS_MESSAGE.fullmatch(normalized):
+        return True
+    if _NEGATED_MESSAGE.search(normalized):
         return False
-    if negative and positive:
-        return None
-    if negative:
-        return False
-    return True if positive else None
+    if _FAILED_MESSAGE.search(normalized):
+        return None if _SUCCESS_MESSAGE.search(normalized) else False
+    return None
 
 
 def _structured_result(key, value):

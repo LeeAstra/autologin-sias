@@ -72,12 +72,15 @@ def setup_env(app) -> int:
 
     try:
         app.write_env_file(target, username, password)
+    except ValueError as exc:
+        print(f"配置无效：{exc}")
+        return 2
     except OSError as exc:
         print(f"无法写入配置文件：{exc}")
         return 3
 
     app.ENV_PATH = target
-    print("配置已保存，正在测试后台登录……")
+    print("配置已保存，正在验证本次保存的账号密码……")
     result = app.run_login(validate_credentials=True)
     if result == 0:
         print("配置测试成功。之后可将无窗口 EXE 加入定时任务。")

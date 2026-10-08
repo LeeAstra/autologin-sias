@@ -48,6 +48,28 @@ try {
     Assert ($continuous.Task.Settings.ExecutionTimeLimit -eq 'PT0S') 'Continuous execution limit incorrect.'
     Assert ([bool]$continuous.Task.Triggers.LogonTrigger) 'Logon fallback missing.'
     Assert ([bool]$continuous.Task.Triggers.BootTrigger) 'Boot fallback missing.'
+    $baseline = $continuous.OuterXml
+    $unsupported = @(
+        @{Name='multiple actions'; Edit={param($x) [void]$x.Task.Actions.AppendChild($x.Task.Actions.Exec.CloneNode($true))}},
+        @{Name='multiple principals'; Edit={param($x) [void]$x.Task.Principals.AppendChild($x.Task.Principals.Principal.CloneNode($true))}},
+        @{Name='password logon'; Edit={param($x) $x.Task.Principals.Principal.LogonType='Password'}},
+        @{Name='other account'; Edit={param($x) $x.Task.Principals.Principal.UserId='S-1-5-18'}},
+        @{Name='unsafe arguments'; Edit={param($x) $x.Task.Actions.Exec.Arguments='--setup'}},
+        @{Name='multiple WLAN triggers'; Edit={param($x) [void]$x.Task.Triggers.AppendChild($x.Task.Triggers.EventTrigger.CloneNode($true))}},
+        @{Name='unrelated event'; Edit={param($x) $x.Task.Triggers.EventTrigger.Subscription='<QueryList><Query Id="0" Path="Application"><Select Path="Application">*</Select></Query></QueryList>'}},
+        @{Name='unexpected trigger'; Edit={param($x) [void]$x.Task.Triggers.AppendChild($x.CreateElement('SessionStateChangeTrigger',$x.DocumentElement.NamespaceURI))}}
+    )
+    foreach ($case in $unsupported) {
+        [xml]$bad=$baseline
+        & $case.Edit $bad
+        $global:AutoLoginTestExistingXml=$bad.OuterXml
+        $beforePreview=[IO.File]::ReadAllText($preview)
+        $failed=$false
+        try { & $installer -ExePath $exe -Mode night -ExportOnly $preview } catch { $failed=$true }
+        Assert $failed ('Unsupported task accepted: '+$case.Name)
+        Assert ([IO.File]::ReadAllText($preview) -eq $beforePreview) ('Rejected task wrote preview: '+$case.Name)
+    }
+    Write-Output 'Eight unsupported task variants rejected by read-only preflight.'
     Write-Output 'Task XML preview tests passed (no tasks registered).'
 } finally {
     # Only remove the unique, verified fixture directory created above.

@@ -24,6 +24,12 @@ if ($existing) {
     $before = Export-ScheduledTask -TaskName $TaskName -TaskPath '\'
     [xml]$xml = $before
     if (@($xml.Task.Actions.ChildNodes).Count -ne 1 -or -not $xml.Task.Actions.Exec) { throw 'Existing task must have exactly one Exec action.' }
+    if (@($xml.Task.Principals.Principal).Count -ne 1) { throw 'Existing task must have exactly one principal.' }
+    $principalId = [string]$xml.Task.Principals.Principal.UserId
+    if ($principalId -notlike 'S-1-*') {
+        $principalId = ([Security.Principal.NTAccount]::new($principalId)).Translate([Security.Principal.SecurityIdentifier]).Value
+    }
+    if ($principalId -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'Existing task belongs to another account.' }
     if ($xml.Task.Principals.Principal.LogonType -notin @('S4U', 'InteractiveToken')) { throw 'Existing task uses an unsupported logon type; update it manually to preserve its credentials.' }
 } else {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -87,7 +93,7 @@ if ($workingDirectory) { $workingDirectory.InnerText = $exe.DirectoryName }
 else { Add-TextElement $xml.Task.Actions.Exec 'WorkingDirectory' $exe.DirectoryName }
 # An old action's arguments may invoke setup or other unintended modes.
 $arguments = $xml.Task.Actions.Exec.SelectSingleNode('*[local-name()="Arguments"]')
-if ($arguments -and (-not $Mode -or $arguments.InnerText -notin @('--maintain continuous','--maintain night'))) { throw 'Existing action has unrecognized arguments; review them manually.' }
+if ($arguments -and (($arguments.InnerText -ne '' -and -not $Mode) -or $arguments.InnerText -notin @('','--maintain continuous','--maintain night'))) { throw 'Existing action has unrecognized arguments; review them manually.' }
 if ($Mode) {
     $enabled = $xml.Task.Settings.SelectSingleNode('*[local-name()="Enabled"]')
     if ($enabled) { $enabled.InnerText = 'true' }

@@ -1,62 +1,82 @@
-# 维护与验证
+# 开发指南
 
-当前源码与最新预发布为 **v1.3.0-rc.4**；稳定 Latest 仍为 **v1.2.0**。唯一版本来源是 `src/sias_autologin/version.py`。不同版本安装器和后台EXE不得混用。
+面向修改源码或移植平台的开发者，基于已发布 v1.3.0。用户安装无需 Python；贡献和发布规则见[维护与发布](MAINTENANCE.md)。
 
-代码组织见 [三层架构](ARCHITECTURE.md)，安装与模式选择见 [rc.4指南](releases/v1.3.0-rc.4.md)，全部入口见 [文档索引](README.md)。
+## 结构和入口
 
-## 构建与发布
+| 位置 | 职责 |
+|---|---|
+| `src/sias_autologin/core/` | 门户传输、响应判断、状态查询及一次认证操作 |
+| `src/sias_autologin/runtime/` | 平台无关维护循环、窗口、等待和提交冷却 |
+| `src/sias_autologin/platforms/windows/` | WLAN API、维护入口、互斥、安装事务及任务管理 |
+| `src/sias_autologin/cli.py`、`config.py` | 命令行、日志、配置读写与凭据选择 |
+| `scripts/windows/`、`scripts/build/` | 任务 PowerShell 脚本及构建脚本 |
+| `tools/experiments/` | 不随安装部署的监测、诊断和测量工具 |
 
-使用 Windows x64 / Python 3.13，安装 `requirements-build.txt` 后运行：
+`python -m sias_autologin` 是源码命令入口。`src/auto_login_headless.py` 和 `src/install_autologin.py` 是保留的兼容/打包入口；`src/credentials.py`、`src/app_version.py` 和顶层 `scripts/` 转发脚本同样保留兼容。唯一版本来源是 `src/sias_autologin/version.py`。[调用关系与关键策略](ARCHITECTURE.md)。
+
+## 在源码中运行
+
+以下在 **Windows PowerShell 的仓库根目录**执行，使用 Python 3.13（当前 CI 版本）。建立独立虚拟环境，只影响该仓库的 `.venv`：
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m unittest discover -s tools/experiments/login-diagnostics -v
-python -m unittest discover -s tools/experiments/login-monitor -v
-powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-TaskPreview.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File tests/Test-AcceptanceEvidence.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build/Build-Installer.ps1
-python tests/check_task_commands.py
-python tests/check_task_recovery.py
-python tests/check_installer_lock.py
-python tests/check_bundle.py
-python tests/check_live_wlan.py
-python tests/check_frozen_login.py
+python -m venv .venv
+$python = Join-Path (Get-Location) '.venv\Scripts\python.exe'
+$env:PYTHONUTF8 = '1'
+$env:PYTHONPATH = Join-Path (Get-Location) 'src'
+& $python -m sias_autologin --version
 ```
 
-产物位于 `packaging/dist/`：安装器EXE、后台EXE及SHA256SUMS.txt。旧 scripts/ 路径保留为兼容转发；历史Setup spec不用于当前发布。不同Python发行版的构建摘要可能不同。
+预期显示 `AutoLogin_SIAS_Headless 1.3.0`。运行代码只依赖标准库，打包工具另外安装。使用自己的 Python 路径时替换 `$python`，不要改系统环境变量。
 
-使用短期分支和PR，最终提交的Linux与Windows CI通过后合并。发布时同步版本与CHANGELOG，从同一源码构建两个EXE；在已验证提交建立带注释标签，上传三个资产并核对摘要。预发布不替换稳定Latest；不移动已发布标签、不覆盖既有二进制资产。CI产物不会自动发布Release。
+下面是**可选真实认证操作**：连接 UESTC 后运行，会写 `src/.env` 并提交本次凭据验证；已有文件先询问是否覆盖，不创建计划任务：
 
-不得提交.env、真实运行日志、捕获资料、EXE或构建目录。实验源码在tools/experiments/，不进入正式安装包；原实验EXE继续独立保存。公开验证记录仅保留脱敏结果。
+```powershell
+& $python -m sias_autologin --setup
+```
 
-## 当前验证记录
+需要测试一次登录可用 `--check`，它可能提交认证，**不是只读状态查询**。无参数同样执行一次检测/登录。维护入口 `--maintain night` 或 `--maintain continuous` 仅 Windows 可用；已有正式维护实例时不要并行测试。`--validate-credentials` 强制验证保存配置，即使在线也提交。发布的 Headless EXE 无控制台，普通用户交互配置使用完整安装器。
 
-81项正式测试、5项诊断测试、4项监测测试通过，1项依赖本地捕获资料的测试跳过。Linux核心与Windows完整CI通过；任务XML、载荷、实际冻结程序认证、特殊字符凭据和失败回滚已验证；本轮增加强制验证失败文字、维护二次状态变化、跨窗口边界、真实安装器跨进程锁和验收日志归属检查。
+Linux/macOS 可复用 `core` 和 `runtime`，模块导入需将 `src` 加入 `PYTHONPATH`；本项目目前没有这些平台的维护安装器。不要把 Windows 维护命令当作跨平台支持。
 
-夜间验收应核对四项：任务按窗口启动、状态明确需认证时才登录、登录后查询确认恢复、窗口结束后退出。核对任务返回码及漏执行次数，详细日志保存在本地，不提交公开仓库。
+## 测试
 
-仍待验收：持续维护模式长期运行与真实断网重连、睡眠/恢复、全新账户及完整安装向导。一次夜间成功不代表这些场景已经通过。程序不新增唤醒策略，夜间测试须保持电脑唤醒且连接UESTC。
+从仓库根目录执行源码和实验回归，使用合成夹具，不需要真实账号：
 
-历史版本演进索引见 [历史验证记录](history/VALIDATION-2026-10-06.md)。
+```powershell
+& $python -m unittest discover -s tests -v
+& $python -m unittest discover -s tools/experiments/login-diagnostics -v
+& $python -m unittest discover -s tools/experiments/login-monitor -v
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-TaskPreview.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-AcceptanceEvidence.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-AcceptanceStatus.ps1
+```
 
-## rc.5 WLAN优化候选
+任务预览只生成临时 XML，不注册任务；证据和状态测试使用合成数据。依赖本地捕获资料的实验测试可能跳过，应保留跳过原因而非报告全部实机场景通过。
 
-平台层改为WLAN API，频率、任务、电源与安装规则不变。新增资源对照与真实冻结WLAN检查；后者在CI没有已验证UESTC时明确跳过，本机已通过。实测和待完成的任务账户/睡眠/整夜验收见[资源优化](RESOURCE-OPTIMIZATION.md)。候选安装包仅构建验证，本轮未安装到本机；已发布候选仍为rc.4。
+## Windows 构建与冻结验证
 
-## rc.6审查与结构整理
+**构建会更新本地 `packaging/dist/`，不会更新已安装程序或上传 Release。** 使用干净提交，在上面的虚拟环境中执行：
 
-修复文字成功前缀误判和未提交认证进入15秒冷却。文字成功改为完整格式匹配，重复否定规则合并；维护回调只接受LoginResult，删除整数兼容与重复类型分支，单次认证接口不变。81项单元回归覆盖新样例、在线强制验证、5秒重查和真正提交后15秒等待；冻结回归直接记录loopback服务收到POST的时间。
+```powershell
+& $python -m pip install -r requirements-build.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Python $python
+& $python tests/check_task_commands.py
+& $python tests/check_installer_lock.py
+& $python tests/check_bundle.py
+& $python tests/check_live_wlan.py
+& $python tests/check_task_recovery.py
+& $python tests/check_frozen_login.py
+```
 
-认证核心、通用循环、平台适配保持分层；旧入口适配层继续承担现有实验和旧接口兼容。rc.6 审阅发现安装器集中多种职责，已在 rc.7 整理。
+脚本按顺序构建后台和安装器，输出两个 EXE、`SHA256SUMS.txt`、`BUILD-INFO.json`。实际实现脚本在 `scripts/build/`；旧路径仅转发，不另维护一套逻辑。
 
-资源性能表对应rc.5历史测量；rc.6/rc.7未重新跑完整开销比较。最新验收使用rc.7，见[发布验收](RELEASE-ACCEPTANCE.md)。
+冻结认证使用固定 loopback 模拟服务；测试专用构建的模拟 WLAN、配置输入及代理钩子不进入生产包。`check_live_wlan.py` 会查询真实 WLAN，未确认 UESTC 时有明确跳过；它不能替代实际任务账户验收。
 
-## rc.7 安装器整理
+**管理员权限测试会创建、运行及删除隔离临时任务和目录。** `check_task_recovery.py`、冻结安装矩阵不触碰正式 `AutoLogin_SIAS`；覆盖两种模式新装、原位、迁移、在线错误凭据后的恢复、不支持旧任务及其他路径同名进程保护。普通权限可能跳过任务测试；Windows CI 要求管理员矩阵实际通过。完整检查以[CI 工作流](../.github/workflows/windows.yml)为准。
 
-向导、文件部署事务、任务快照与恢复分开；备份、文件恢复和迁移清理各自集中。保留跨进程互斥、旧入口和完整回滚，不增加运行依赖。7种生成命令在Windows PowerShell中只做语法解析；真实临时任务恢复在管理员CI中验证。安装路径、两种模式、触发条件和电源策略保持原样；本轮不改本机安装状态。
+## 扩展平台或协议
 
-## v1.3.0 拟发布验证
+协议适配在 `core/portal.py`、`state.py` 和 `authentication.py`，先用合成响应及模拟服务验证。平台移植实现自己的网络许可、调度和单实例机制，并向 `runtime` 注入回调；不要在核心导入 Windows API。
 
-修复保存配置验证的环境覆盖，旧任务前置只读预检，以及无运行证据时的迁移旧文件保护。87项单元测试、8种不支持的旧任务预检，以及冻结配置向导/生产凭据冲突回归已纳入CI。冻结任务矩阵使用随机临时任务、隔离目录、模拟WLAN与固定loopback代理，覆盖新装、原位升级、迁移、两种模式、在线凭据拒绝恢复和不支持旧任务不变；生产包不包含测试钩子。普通权限本机明确跳过管理员任务测试，CI要求执行通过。
-
-提交后从同一提交重建正式拟发布包并执行最终EXE验证，生成BUILD-INFO.json记录提交和SHA256。实机验收未完成时不创建正式标签/Release，不把源码或模拟网络测试当作真实夜间验收。发布操作只上传同组已验证EXE、SHA256SUMS.txt及BUILD-INFO.json；最终拟发布提交、通过CI提交和打包来源一致。
+新功能需分别说明协议、任务触发和电源条件的影响。自动化不能替代真实网络、UAC、连接事件和睡眠验收。[v1.3.0 验收](releases/v1.3.0-acceptance.md)记录实际覆盖和限制，[历史开发记录](history/DEVELOPMENT-THROUGH-2026-10-07.md)保留候选演进。

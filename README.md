@@ -1,48 +1,61 @@
 # AutoLogin SIAS
 
-连接 UESTC 后检测 SIAS 认证状态，仅明确需要认证时重新登录。认证核心、通用维护循环和 Windows 平台适配分层，运行安装包无需 Python。
+为连接 **UESTC** 的 Windows 电脑自动维护 SIAS 校园网认证。已经在线时只检测；明确需要认证时才提交登录。适合希望电脑在校园网认证失效后自动重登的用户。
 
-**v1.3.0 · Windows x64**
+**当前正式版：[v1.3.0](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0)** · Windows x64 · 安装包无需 Python
 
-[下载完整安装器](https://github.com/LeeAstra/autologin-sias/releases/download/v1.3.0/AutoLogin_SIAS_Installer.exe) · [Release](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0) · [安装、升级与恢复](docs/releases/v1.3.0.md) · [文档索引](docs/README.md)
+## 下载哪个文件？
 
-正式发布状态以 Release 页面为准。[实机验收记录](docs/releases/v1.3.0-acceptance.md)记录覆盖范围与限制。
+**普通用户下载 [AutoLogin_SIAS_Installer.exe（完整安装器）](https://github.com/LeeAstra/autologin-sias/releases/download/v1.3.0/AutoLogin_SIAS_Installer.exe)。**
 
-## 安装
+| 文件 | 用途 |
+|---|---|
+| `AutoLogin_SIAS_Installer.exe` | 安装程序、配置凭据、创建或更新自动任务；首次安装和升级都用它 |
+| `AutoLogin_SIAS_Headless.exe` | 无窗口后台程序；单独下载不会安装任务，也不会完成交互配置 |
+| `Source code (zip / tar.gz)` | 开发者使用的源码压缩包，不能双击安装 |
+| `SHA256SUMS.txt`、`BUILD-INFO.json` | 校验下载文件、查看构建来源；[校验步骤](docs/MAINTENANCE.md#校验下载文件) |
 
-1. 连接 UESTC，使用自己的 Windows 管理员账户打开安装器并允许 UAC；不要换另一个管理员账户提权。
-2. 输入校园网凭据，选择安装目录。默认 `%LOCALAPPDATA%\AutoLogin_SIAS`，可以选择其他本地目录。密码输入不显示文字。
-3. 选择维护模式：默认 **② 夜间维护**，每天 02:55～03:15 每 5 秒检测；**① UESTC 持续维护**每 30 秒检测，明确离开 UESTC 后退出。
-4. 确认安装。安装会实际提交本次保存的凭据验证，已在线也不能替代密码验证。部署完成后核对计划任务的执行路径和模式。
+默认 Wi-Fi 名称为 `UESTC`，认证接口为 `http://2.2.2.3`。仅验证了本项目对应的 SIAS 协议，不是通用校园网登录器。本轮实机为 Windows 11 x64；其他系统或网络需分别验证。
 
-任务启动请求成功不代表维护已运行。夜间模式在窗口外正常退出；持续模式运行中不要求上次结果为 0。使用 [验收采集步骤](docs/RELEASE-ACCEPTANCE.md)检查本轮运行证据。
+## 选择哪种模式？
 
-## 升级与恢复
+| 安装选项 | 检测周期 | 运行范围 | 适合谁 |
+|---|---|---|---|
+| ① UESTC 持续维护 | 每轮检测后等待 30 秒 | 连接 UESTC 时维护；明确离开后退出 | 希望全天维护的用户 |
+| **② 夜间时段维护（默认）** | 每轮检测后等待 5 秒 | 每天本地时间 02:55～03:15 | 只希望在该时段维护的用户 |
 
-使用完整安装器原位升级或更换目录。安装器先检查旧任务兼容性，再停止旧维护进程并备份文件和任务 XML；失败时尝试恢复。迁移后保留旧目录文件，确认新目录实际工作后由用户处理，避免只因启动命令成功就删除旧文件。不要手动运行旧目录程序。
+**电脑必须保持唤醒并连接 UESTC。** 程序不自动唤醒，不主动连接 Wi-Fi，也不改变原有任务电源条件。夜间模式在时段外会正常退出。
 
-仅替换后台 EXE 不会更新任务或切换维护模式。详细备份位置、环境变量兼容规则和恢复步骤见 [版本指南](docs/releases/v1.3.0.md)。
+“五秒检测”是每轮等待间隔，**不保证五秒内恢复网络**：检测和请求耗时、认证服务器响应及失败重试都会影响恢复时间。实际提交后至少等待 15 秒才能再次提交；未知状态先等待。完整规则见[使用指南](docs/USAGE.md#运行条件与触发方式)。
 
-## 运行限制
+## 第一次安装
 
-不修改既有任务电源条件，不自动唤醒电脑；夜间实验需要保持唤醒并连接 UESTC。未知认证或 WLAN 状态不提交登录，实际认证失败后至少间隔 15 秒重试。安装包未签名，其他学校的认证接口需要单独适配。
+准备自己的校园网账号密码，先连接 UESTC。使用自己的 Windows 管理员账户；Windows 的管理员权限提示（UAC）若要求换另一账户提权，先停止安装并[反馈账户环境](docs/TROUBLESHOOTING.md#反馈问题)。
 
-下载文件包括完整安装器、后台 EXE、SHA256SUMS.txt 和 BUILD-INFO.json；普通用户使用完整安装器。源码压缩包不能直接安装。
+1. 双击完整安装器，核对文件来源后允许 Windows 的权限提示。窗口标题内容包含 `AutoLogin SIAS 1.3.0 一键部署`。
+2. 在“安装目录”提示中按回车使用默认位置，或输入本地绝对路径。
+3. 在“选择模式 [1/2，默认2]”中输入 `1` 或 `2`；直接回车选择夜间模式。
+4. 输入校园网账号和密码；密码不显示文字或星号是正常现象。发现旧配置时会询问是否保留。
+5. 核对目录和模式，在“确认安装？[Y/n]”中按回车继续。安装会验证凭据并更新任务；看到“部署完成”后按回车关闭窗口。
 
-独立夜间实验放在 [tools/experiments](tools/experiments/README.md)，不随安装包部署，也不修改正式任务。旧版操作参考 [历史版本](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.2.0)。
+更多操作：[升级、改密码、切换模式、迁移和卸载](docs/USAGE.md)。火绒提示的用途与核查方法见[故障排查](docs/TROUBLESHOOTING.md#火绒或其他行为防护提示)。
 
-## 常见操作
+## 怎样确认在工作？
 
-- **把程序迁移到 D 盘**：[安装与迁移](docs/releases/v1.3.0.md)
-- **VPN 全局代理挡住认证页**：[让 `2.2.2.3` 走校园网直连](docs/USAGE.md#vpn-全局代理)
-- **查看日志、安装失败、升级与恢复**：[版本指南](docs/releases/v1.3.0.md)；旧版停用或卸载见[历史使用指南](docs/USAGE.md)
-- **修改 Wi-Fi 名称、时间或电源设置**：[自动任务高级配置](docs/USAGE.md#自动任务高级配置)
-- **反馈问题**：[提交 Issue](https://github.com/LeeAstra/autologin-sias/issues/new)。请说明版本、操作步骤和错误提示；不要上传密码或 `.env`。
+“部署完成”说明任务已更新并请求启动，不能单独证明网络恢复。按三个层次检查：
 
-## 适用范围与更多资料
+1. **任务已注册：** 按 `Win + R`，输入 `taskschd.msc`；在“任务计划程序库”找到 `AutoLogin_SIAS`。打开“属性 → 操作”，确认程序路径及 `--maintain night` 或 `--maintain continuous`。
+2. **程序实际运行：** 持续模式在 UESTC 下通常显示“正在运行”；夜间模式在时段外显示“就绪”并返回 `0x0` 属正常情况。到实际安装目录查看 `auto_login_headless.log` 中本轮 `start` 和状态记录。
+3. **认证恢复：** 本轮日志应出现 `auth_required`、真实提交及 `confirmed=true` 的 `login_result`。再打开常用网页检查外网；门户认证成功不等于外网一定可用。
 
-已验证自动化测试、实际 EXE 回归、真实 UESTC 认证及现有计划任务执行。本机升级、迁移运行、断网重连、睡眠恢复和自然登出重登已验证；全新账户、锁屏及多无线网卡仍需独立实机覆盖，详见 [实机验收记录](docs/releases/v1.3.0-acceptance.md)。
+一直在线时没有认证提交是正常现象。详细判断、只读状态采集和反馈模板见[故障排查](docs/TROUBLESHOOTING.md#确认任务和本轮运行)。
 
-账号密码保存在本机 `.env` 文件中；门户使用 HTTP 和 RC4 兼容协议。仅使用你有权使用的账号，勿分享配置文件，详见 [安全说明](docs/USAGE.md#账号与配置安全)。
+## 其他入口
 
-[代码结构与跨平台开发](docs/ARCHITECTURE.md) · [更新日志](CHANGELOG.md) · [源码构建与发布](docs/DEVELOPMENT.md#构建与发布) · [v1.1 历史教程](https://github.com/LeeAstra/autologin-sias/blob/v1.1.0/README.md) · [MIT 许可证](LICENSE)
+- [使用指南](docs/USAGE.md)：安装及日常维护。
+- [故障排查](docs/TROUBLESHOOTING.md)：安装失败、未联网及安全软件提示。
+- [开发指南](docs/DEVELOPMENT.md)：源码入口、三层结构、测试及构建。
+- [贡献与发布](CONTRIBUTING.md)：提交流程；[维护与发布指南](docs/MAINTENANCE.md)说明来源与校验。
+- [历史与实验](docs/history/README.md)：旧版说明、独立实验、最终验收及历史测量。
+
+凭据保存在本机 `.env`，不是加密存储。不要上传真实配置、密码、Cookie 或整个安装目录。[配置与隐私说明](docs/USAGE.md#配置与隐私)。项目采用 [MIT 许可证](LICENSE)。

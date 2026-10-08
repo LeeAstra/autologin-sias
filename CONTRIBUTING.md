@@ -1,30 +1,22 @@
-# 参与和维护
+# 参与项目
 
-本项目采用 GitHub Flow：`main` 保存已完成检查的代码，改动使用短期分支和 Pull Request。建议分支名 `codex/简短主题`，每个 PR 集中处理一项可独立说明的改动。合并后删除远端功能分支；PR、提交历史和版本标签仍保留。
+面向提交代码或文档的贡献者。项目使用短期分支和 Pull Request（PR，即合并前供检查的改动）。[开发指南](docs/DEVELOPMENT.md)说明结构与测试，[维护与发布](docs/MAINTENANCE.md)统一版本和资产规则。
 
-## 修改与验证
+## 提交改动
 
-分层设计与跨平台开发入口见 [代码结构](docs/ARCHITECTURE.md)。认证核心在 `src/sias_autologin/core/`，可跨平台循环在 `runtime/`，Windows 适配在 `platforms/windows/`。正式认证程序在 `src/`，安装与任务脚本在 `scripts/`，实验工具在 `tools/experiments/`。实验代码不纳入安装包。改动任务条件或认证协议时，必须在 PR 中明确说明；普通状态检测调整不应顺带改变触发时间或电源设置。
+1. 从最新 `main` 建立短期分支，建议 `codex/简短主题`。
+2. 保持认证核心、通用循环和平台适配分层；实验代码留在 `tools/experiments/`，不进入安装包。
+3. 运行与改动相应的检查，提交 PR，按模板写清问题、最终改动、验证、未覆盖场景和具体影响。
+4. 等待必需 CI 及讨论通过后合并，删除已合并远端分支，保留 PR 和标签历史。
 
-安装构建依赖后，在 Windows / Python 3.13 运行：
+改动任务触发、认证协议、电源或安装规则须明确说明。文档改动核对实现、链接、版本和敏感信息，不顺带改行为，也不重新打包已发布版本。
 
-```powershell
-python -m pip install -r requirements-build.txt
-python -m unittest discover -s tests -v
-python -m unittest discover -s tools/experiments/login-diagnostics -v
-python -m unittest discover -s tools/experiments/login-monitor -v
-powershell -ExecutionPolicy Bypass -File .\tests\Test-TaskPreview.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
-python tests/check_bundle.py
-python tests/check_frozen_login.py
-```
+## 测试边界与资料
 
-自动测试使用合成凭据和本机门户，不应触发真实认证或注册系统任务。真实校园网、UAC、锁屏和连接事件验证另行记录，不能用 CI 成功代替实机验证。
+源码回归使用合成数据；冻结回归使用本机模拟门户。Windows 管理员测试会创建和删除唯一命名的隔离临时任务，不能将它们描述为完全不注册任务，也不能替换成本机正式任务。真实网络、UAC、睡眠及连接事件验收另外记录。[测试步骤](docs/DEVELOPMENT.md#测试)。
 
-## 版本与发布
+不要提交 `.env`、密码、Cookie、真实捕获、用户日志、EXE 或构建目录。问题反馈使用[固定模板](docs/TROUBLESHOOTING.md#反馈问题)，合成样例用于复现；不提供真实凭据。
 
-`src/sias_autologin/version.py` 为唯一版本来源。新增向后兼容功能递增次版本，修复递增补丁版本；未完成必要实机验证时使用 `-rc.N` 预发布。同步维护 `CHANGELOG.md`、说明和 Release，标签为 `v版本号`，指向实际验证过的提交。
+## 发布约定
 
-合并前 CI 必须通过。安装器和后台 EXE 从同一提交构建并验证，发布二者及 `SHA256SUMS.txt`；EXE 放在 Release Assets，不能提交到源码仓库。预发布不得覆盖稳定版或设为 Latest。发布后校验标签、源码版本、资产校验和一致，再更新本地 `main`。不重新移动已经发布的标签。
-
-不要提交 `.env`、密码、Cookie、真实资料、抓包或实验结果。报告问题使用合成样例、程序版本和脱敏错误；不要把凭据粘贴到公开 Issue。
+版本来自 `src/sias_autologin/version.py`。安装器、后台 EXE、SHA256SUMS 和 BUILD-INFO 从同一验证来源发布，不移动历史标签、不覆盖旧资产。未完成必要验收时先用预发布。[完整流程](docs/MAINTENANCE.md#发布新版本)。

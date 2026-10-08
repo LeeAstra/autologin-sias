@@ -14,4 +14,4 @@ python tools/experiments/resource-benchmark/measure.py --backend native --mode n
 
 baseline 从固定提交8809b05读取旧检测函数，主程序不包含备用netsh。CPU父进程与子进程分别测量（子进程退出后读取Windows保留计数，不用轮询采样器），RSS同样分列，不能将峰值相加当作同步总峰值；计数排除Git读取与预热。在线与登出场景应分别比较，保持网络与负载条件一致，长时间建议600秒或以上。日志只输出一条汇总，无逐次在线日志。CPU为Windows累计计时，短测量的0表示低于计时分辨率。
 
-测量结果放 `results/`（Git忽略），不得上传凭据或原始用户日志。真实睡眠、Wi-Fi切换和任务账户验收见[验收说明](../../../docs/RESOURCE-OPTIMIZATION.md)。
+测量结果放 `results/`（Git忽略），不得上传凭据或原始用户日志。真实睡眠、Wi-Fi切换和任务账户验收见[验收说明](../../../docs/history/WLAN-RESOURCE-20261007.md)。

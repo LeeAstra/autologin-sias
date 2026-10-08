@@ -15,7 +15,7 @@
 
 源码回归使用合成数据；冻结回归使用本机模拟门户。Windows 管理员测试会创建和删除唯一命名的隔离临时任务，不能将它们描述为完全不注册任务，也不能替换成本机正式任务。真实网络、UAC、睡眠及连接事件验收另外记录。[测试步骤](docs/DEVELOPMENT.md#测试)。
 
-不要提交 `.env`、密码、Cookie、真实捕获、用户日志、EXE 或构建目录。问题反馈使用[固定模板](docs/TROUBLESHOOTING.md#反馈问题)，合成样例用于复现；不提供真实凭据。
+不要提交 `.env`、密码、Cookie、真实捕获、用户日志、EXE 或构建目录。问题反馈使用[固定模板](docs/TROUBLESHOOTING.md#反馈问题)，合成样例用于复现；不提供真实凭据。普通问题可从[Issue 模板](https://github.com/LeeAstra/autologin-sias/issues/new/choose)填写，敏感安全问题按[安全反馈说明](SECURITY.md)处理。
 
 ## 发布约定
 

@@ -39,6 +39,8 @@ jobs:
       - shell: powershell
         run: .\tests\Test-AcceptanceEvidence.ps1
       - shell: powershell
+        run: .\tests\Test-AcceptanceStatus.ps1
+      - shell: powershell
         run: .\scripts\Build-Installer.ps1
       - run: python tests/check_task_commands.py
       - run: python tests/check_task_recovery.py

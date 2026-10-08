@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # Read-only; outputs only current-run evidence, not credentials or legacy logs.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Read-MaintenanceEvidence.ps1')
@@ -18,7 +18,7 @@ $result = [ordered]@{
     last_result = [long]$info.LastTaskResult
     missed_runs = [int]$info.NumberOfMissedRuns
     last_run = $info.LastRunTime.ToString('yyyy-MM-dd HH:mm:ss')
-    next_run = $info.NextRunTime.ToString('yyyy-MM-dd HH:mm:ss')
+    next_run = if ($null -ne $info.NextRunTime) { $info.NextRunTime.ToString('yyyy-MM-dd HH:mm:ss') } else { $null }
     evidence = $evidence
 }
 $result | ConvertTo-Json -Depth 6

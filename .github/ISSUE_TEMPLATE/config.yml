@@ -8,4 +8,4 @@ contact_links:
     about: 先核对任务和本轮运行，再提交脱敏反馈
   - name: 敏感安全问题
     url: https://github.com/LeeAstra/autologin-sias/blob/main/SECURITY.md
-    about: 查看可用反馈渠道，勿在公开 Issue 上传凭据或漏洞细节
+    about: 查看私密漏洞报告说明，勿在公开 Issue 上传凭据或漏洞细节

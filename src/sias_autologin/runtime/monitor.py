@@ -33,16 +33,23 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
     next_login = 0
     previous = None
     reason = 'outside_night_window'
+    # A UESTC connection trigger may start this task outside the night window.
+    # Perform one check then restrict recurring maintenance to the window.
+    started_in_window = mode != 'night' or in_window(clock(), start, end)
+    first_pass = True
     logger.info('Maintenance started: mode=%s interval=%s', mode, interval)
     event('start', mode=mode, version=version)
     try:
-        while mode == 'continuous' or in_window(clock(), start, end):
+        while mode == 'continuous' or first_pass or in_window(clock(), start, end):
             net = network()
             if net == 'wrong_network':
                 reason = 'left_target_wifi'
                 logger.info('Maintenance stopped: left target Wi-Fi')
                 return 0
+            if mode == 'night' and started_in_window and not in_window(clock(), start, end):
+                break
             state, state_reason = query() if net == 'target_network' else ('unknown', 'network_unverified')
+            first_pass = False
             if state != previous:
                 logger.info('Maintenance state: %s -> %s reason=%s', previous, state, state_reason)
                 event('state', previous=previous, state=state)
@@ -78,3 +85,4 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
         raise
     finally:
         event('end', reason=reason)
+

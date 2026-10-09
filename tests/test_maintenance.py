@@ -76,10 +76,13 @@ class MaintenanceTests(unittest.TestCase):
         for previous,next_start in zip(ends,starts[1:]):
             self.assertGreaterEqual((next_start-previous).total_seconds(),15)
 
-    def test_outside_window_does_not_query_network(self):
-        def forbidden(): raise AssertionError('must not run')
-        self.assertEqual(maintain(mode='night',network=forbidden,query=forbidden,login=forbidden,
-                        logger=logging.getLogger('test'),clock=lambda:datetime(2026,1,1,12)),0)
+    def test_outside_window_performs_connection_check_once(self):
+        calls=[]
+        self.assertEqual(maintain(mode='night',network=lambda:'target_network',
+                        query=lambda:('authenticated','fixture'),
+                        login=lambda:calls.append(1), logger=logging.getLogger('test'),
+                        clock=lambda:datetime(2026,1,1,12)),0)
+        self.assertEqual(calls, [])
 
     def test_migration_backs_up_and_preserves_old_files_without_startup_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -132,3 +135,4 @@ class MaintenanceTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b'new')
 
 if __name__ == '__main__': unittest.main()
+

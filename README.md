@@ -2,11 +2,11 @@
 
 为连接 **UESTC** 的 Windows 电脑自动维护 SIAS 校园网认证。已经在线时只检测；明确需要认证时才提交登录。适合希望电脑在校园网认证失效后自动重登的用户。
 
-**当前正式版：[v1.3.0](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.0)** · Windows x64 · 安装包无需 Python
+**当前正式版：[v1.3.1](https://github.com/LeeAstra/autologin-sias/releases/tag/v1.3.1)** · Windows x64 · 安装包无需 Python
 
 ## 下载哪个文件？
 
-**普通用户下载 [AutoLogin_SIAS_Installer.exe（完整安装器）](https://github.com/LeeAstra/autologin-sias/releases/download/v1.3.0/AutoLogin_SIAS_Installer.exe)。**
+**普通用户下载 [AutoLogin_SIAS_Installer.exe（完整安装器）](https://github.com/LeeAstra/autologin-sias/releases/download/v1.3.1/AutoLogin_SIAS_Installer.exe)。**
 
 | 文件 | 用途 |
 |---|---|
@@ -61,3 +61,4 @@
 普通故障或文档建议请使用[反馈模板](https://github.com/LeeAstra/autologin-sias/issues/new/choose)，敏感问题先看[安全反馈说明](SECURITY.md)。
 
 凭据保存在本机 `.env`，不是加密存储。不要上传真实配置、密码、Cookie 或整个安装目录。[配置与隐私说明](docs/USAGE.md#配置与隐私)。项目采用 [MIT 许可证](LICENSE)。
+

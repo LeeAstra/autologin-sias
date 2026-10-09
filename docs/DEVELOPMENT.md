@@ -1,6 +1,6 @@
 # 开发指南
 
-面向修改源码或移植平台的开发者，基于已发布 v1.3.0。用户安装无需 Python；贡献和发布规则见[维护与发布](MAINTENANCE.md)。
+面向修改源码或移植平台的开发者，基于已发布 v1.3.1。用户安装无需 Python；贡献和发布规则见[维护与发布](MAINTENANCE.md)。
 
 ## 结构和入口
 
@@ -79,4 +79,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installe
 
 协议适配在 `core/portal.py`、`state.py` 和 `authentication.py`，先用合成响应及模拟服务验证。平台移植实现自己的网络许可、调度和单实例机制，并向 `runtime` 注入回调；不要在核心导入 Windows API。
 
-新功能需分别说明协议、任务触发和电源条件的影响。自动化不能替代真实网络、UAC、连接事件和睡眠验收。[v1.3.0 验收](releases/v1.3.0-acceptance.md)记录实际覆盖和限制，[历史开发记录](history/DEVELOPMENT-THROUGH-2026-10-07.md)保留候选演进。
+新功能需分别说明协议、任务触发和电源条件的影响。自动化不能替代真实网络、UAC、连接事件和睡眠验收。[v1.3.1 验收](releases/v1.3.1-acceptance.md)记录实际覆盖和限制，[历史开发记录](history/DEVELOPMENT-THROUGH-2026-10-07.md)保留候选演进。
+

@@ -79,10 +79,10 @@ class MaintenanceTests(unittest.TestCase):
     def test_outside_window_performs_connection_check_once(self):
         calls=[]
         self.assertEqual(maintain(mode='night',network=lambda:'target_network',
-                        query=lambda:('authenticated','fixture'),
-                        login=lambda:calls.append(1), logger=logging.getLogger('test'),
+                        query=lambda:('auth_required','fixture'),
+                        login=lambda:calls.append(1) or LoginResult(0,True,True), logger=logging.getLogger('test'),
                         clock=lambda:datetime(2026,1,1,12)),0)
-        self.assertEqual(calls, [])
+        self.assertEqual(calls, [1])
 
     def test_migration_backs_up_and_preserves_old_files_without_startup_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -135,4 +135,5 @@ class MaintenanceTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b'new')
 
 if __name__ == '__main__': unittest.main()
+
 

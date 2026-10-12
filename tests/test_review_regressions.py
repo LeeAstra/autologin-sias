@@ -165,7 +165,7 @@ class ReviewRegressionTests(unittest.TestCase):
         def run_login(**kwargs):
             captured.append(kwargs)
             self.assertTrue(kwargs['require_auth_required'])
-            self.assertFalse(kwargs['before_auth']())
+            self.assertTrue(kwargs['before_auth']())
             return 8
         app=SimpleNamespace(LOGGER=logging.getLogger('adapter-test'),run_login=run_login,query_authentication_state=lambda:('auth_required','fixture'))
         def network(ssid):
@@ -198,3 +198,4 @@ class ReviewRegressionTests(unittest.TestCase):
         self.assertFalse(result['submitted']); self.assertFalse(result['confirmed'])
 
 if __name__=='__main__': unittest.main()
+

@@ -41,6 +41,7 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
     event('start', mode=mode, version=version)
     try:
         while mode == 'continuous' or first_pass or in_window(clock(), start, end):
+            initial_pass = first_pass
             net = network()
             if net == 'wrong_network':
                 reason = 'left_target_wifi'
@@ -55,7 +56,7 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
                 event('state', previous=previous, state=state)
                 previous = state
             if state == 'auth_required' and monotonic() >= next_login:
-                if mode == 'night' and not in_window(clock(), start, end):
+                if mode == 'night' and (started_in_window or not initial_pass) and not in_window(clock(), start, end):
                     break
                 latest_network = network()
                 if latest_network == 'wrong_network':
@@ -66,7 +67,7 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
                     sleep(interval)
                     continue
                 # The second network probe may itself cross the end boundary.
-                if mode == 'night' and not in_window(clock(), start, end):
+                if mode == 'night' and (started_in_window or not initial_pass) and not in_window(clock(), start, end):
                     break
                 result = login()
                 if not isinstance(result, LoginResult):
@@ -85,4 +86,5 @@ def maintain(*, mode, network, query, login, logger, start=day_time(2,55),
         raise
     finally:
         event('end', reason=reason)
+
 

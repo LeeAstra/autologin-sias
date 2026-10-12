@@ -28,7 +28,7 @@ def run(app, arguments):
             return 0
         start, end = time.fromisoformat(arguments.window_start), time.fromisoformat(arguments.window_end)
         def allowed():
-            return target_wifi('UESTC') == 'target_network' and (arguments.maintain != 'night' or in_window(datetime.now(), start, end))
+            return target_wifi('UESTC') == 'target_network'
         def authenticate():
             submitted = [False]
             def on_submit(): submitted[0] = True
@@ -39,3 +39,4 @@ def run(app, arguments):
                         logger=app.LOGGER, start=start, end=end, version=VERSION)
     finally:
         kernel.CloseHandle(handle)
+
